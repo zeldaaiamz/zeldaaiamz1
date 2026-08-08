@@ -100,7 +100,11 @@
       setButtonBusy(submit, true, mode === 'register' ? '注册' : '登录', mode === 'register' ? '正在注册…' : '正在登录…');
       try {
         if (mode === 'register') {
-          const { data, error } = await client.auth.signUp({ email, password: passwordValue });
+          const { data, error } = await client.auth.signUp({
+            email,
+            password: passwordValue,
+            options: { emailRedirectTo: route('') },
+          });
           if (error) throw error;
           if (data.session) window.location.assign(route('tool/'));
           else showMessage(message, '注册成功，请打开确认邮件后再登录。', 'success');
