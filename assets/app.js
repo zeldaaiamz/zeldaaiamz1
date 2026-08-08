@@ -276,7 +276,12 @@
         const contentType = extension === 'csv' ? 'text/csv' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
         const upload = await client.storage.from(config.storageBucket).upload(uploadPath, file, { contentType, upsert: false });
         if (upload.error) throw upload.error;
-        const inserted = await client.from('keyword_tasks').insert({ user_id: user.id, asin, upload_path: uploadPath, status: '待处理' });
+        const inserted = await client.from('keyword_tasks').insert({
+          id: taskId,
+          user_id: user.id,
+          asin,
+          upload_path: uploadPath,
+        });
         if (inserted.error) {
           await client.storage.from(config.storageBucket).remove([uploadPath]);
           throw inserted.error;
