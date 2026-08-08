@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>报告 · 关键词作战台</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body data-page="report">
+  <header class="site-header">
+    <a class="brand-link" href="../tool/"><span class="brand-mark small">K</span><strong>关键词作战台</strong></a>
+    <a class="secondary-button" href="../tool/">返回工具页</a>
+  </header>
+  <main class="report-shell">
+    <section class="report-toolbar">
+      <div><p class="eyebrow">BATTLE REPORT</p><h1 id="report-title">关键词作战总表</h1><p id="report-meta">正在读取任务信息…</p></div>
+      <div id="report-status" class="status-badge neutral"><i></i>加载中</div>
+    </section>
+    <div id="report-message" class="message report-message" role="status" hidden></div>
+    <section id="report-loading" class="report-loading" aria-live="polite"><span class="spinner" aria-hidden="true"></span><strong>正在加载报告</strong><p>报告生成中时，本页会每 30 秒自动检查。</p></section>
+    <section id="report-view" class="report-frame-wrap" hidden>
+      <iframe id="report-frame" title="关键词作战总表" sandbox="allow-scripts"></iframe>
+    </section>
+  </main>
+  <script src="../assets/vendor/supabase.js"></script>
+  <script src="../assets/config.js"></script>
+  <script src="../assets/app.js"></script>
+</body>
+</html>

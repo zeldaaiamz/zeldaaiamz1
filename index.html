@@ -1,1 +1,57 @@
-建设中
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>登录 · 关键词作战台</title>
+  <link rel="stylesheet" href="./assets/styles.css">
+</head>
+<body data-page="auth" class="auth-page">
+  <main class="auth-layout">
+    <section class="brand-panel" aria-labelledby="brand-title">
+      <div class="brand-mark" aria-hidden="true">K</div>
+      <p class="eyebrow">Amazon Keyword Operations</p>
+      <h1 id="brand-title">关键词作战台</h1>
+      <p class="brand-copy">把广告实绩、关键词热度、竞争格局和打法建议放进同一张作战总表。</p>
+      <ul class="feature-list">
+        <li><span>01</span> 上传广告搜索词报表</li>
+        <li><span>02</span> 自动补齐西柚与豆包判断</li>
+        <li><span>03</span> 在线查看关键词作战总表</li>
+      </ul>
+    </section>
+
+    <section class="auth-card" aria-labelledby="auth-title">
+      <div class="auth-tabs" role="tablist" aria-label="账户操作">
+        <button class="auth-tab active" type="button" data-auth-mode="login" role="tab" aria-selected="true">登录</button>
+        <button class="auth-tab" type="button" data-auth-mode="register" role="tab" aria-selected="false">注册</button>
+      </div>
+      <div class="section-heading compact">
+        <p class="eyebrow">WELCOME</p>
+        <h2 id="auth-title">登录你的工作台</h2>
+        <p id="auth-description">使用邮箱和密码继续。</p>
+      </div>
+      <div id="auth-message" class="message" role="status" hidden></div>
+      <form id="auth-form" novalidate>
+        <label class="field">
+          <span>邮箱</span>
+          <input id="email" name="email" type="email" autocomplete="email" placeholder="name@example.com" required>
+        </label>
+        <label class="field">
+          <span>密码</span>
+          <input id="password" name="password" type="password" autocomplete="current-password" minlength="8" placeholder="至少 8 位" required>
+        </label>
+        <label id="confirm-group" class="field" hidden>
+          <span>确认密码</span>
+          <input id="confirm-password" name="confirmPassword" type="password" autocomplete="new-password" minlength="8" placeholder="再次输入密码">
+        </label>
+        <button id="auth-submit" class="primary-button full" type="submit">登录</button>
+      </form>
+      <p class="privacy-note">登录状态仅用于访问你自己的任务和报告。</p>
+    </section>
+  </main>
+  <script src="./assets/vendor/supabase.js"></script>
+  <script src="./assets/config.js"></script>
+  <script src="./assets/app.js"></script>
+</body>
+</html>
