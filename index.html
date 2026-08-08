@@ -22,7 +22,7 @@
     </section>
 
     <section class="auth-card" aria-labelledby="auth-title">
-      <div class="auth-tabs" role="tablist" aria-label="账户操作">
+      <div id="auth-tabs" class="auth-tabs" role="tablist" aria-label="账户操作">
         <button class="auth-tab active" type="button" data-auth-mode="login" role="tab" aria-selected="true">登录</button>
         <button class="auth-tab" type="button" data-auth-mode="register" role="tab" aria-selected="false">注册</button>
       </div>
@@ -33,12 +33,12 @@
       </div>
       <div id="auth-message" class="message" role="status" hidden></div>
       <form id="auth-form" novalidate>
-        <label class="field">
+        <label id="email-group" class="field">
           <span>邮箱</span>
           <input id="email" name="email" type="email" autocomplete="email" placeholder="name@example.com" required>
         </label>
         <label class="field">
-          <span>密码</span>
+          <span id="password-label">密码</span>
           <input id="password" name="password" type="password" autocomplete="current-password" minlength="8" placeholder="至少 8 位" required>
         </label>
         <label id="confirm-group" class="field" hidden>
@@ -46,6 +46,7 @@
           <input id="confirm-password" name="confirmPassword" type="password" autocomplete="new-password" minlength="8" placeholder="再次输入密码">
         </label>
         <button id="auth-submit" class="primary-button full" type="submit">登录</button>
+        <button id="forgot-password" class="text-button auth-helper" type="button">忘记密码？发送重置邮件</button>
       </form>
       <p class="privacy-note">登录状态仅用于访问你自己的任务和报告。</p>
     </section>
