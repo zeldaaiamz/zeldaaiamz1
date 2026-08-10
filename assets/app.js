@@ -271,7 +271,8 @@
       if (file.size > config.maxUploadBytes) return showMessage(submitMessage, '文件超过 10 MB，请压缩数据范围后重新上传。');
 
       setButtonBusy(submitButton, true, '提交任务', '正在上传…');
-      const uploadPath = `${user.id}/${crypto.randomUUID()}.${extension}`;
+      const taskId = crypto.randomUUID();
+      const uploadPath = `${user.id}/${taskId}.${extension}`;
       try {
         const contentType = extension === 'csv' ? 'text/csv' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
         const upload = await client.storage.from(config.storageBucket).upload(uploadPath, file, { contentType, upsert: false });
