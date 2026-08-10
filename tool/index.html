@@ -23,8 +23,20 @@
       <div class="panel-title"><div><p class="step-label">STEP 01</p><h2 id="submit-title">提交资料</h2></div><p>.xlsx / .csv，最大 10 MB</p></div>
       <div id="submit-message" class="message" role="status" hidden></div>
       <form id="task-form" class="task-form" novalidate>
-        <label class="field asin-field"><span>ASIN</span><input id="asin" name="asin" type="text" maxlength="10" autocapitalize="characters" spellcheck="false" placeholder="例如 B09V366BDY" required><small>10 位，必须以 B0 开头</small></label>
-        <label class="field file-field"><span>广告搜索词报表</span><input id="report-file" name="report" type="file" accept=".xlsx,.csv" required><small id="file-name">尚未选择文件</small></label>
+        <div class="task-primary-fields">
+          <label class="field asin-field"><span>ASIN</span><input id="asin" name="asin" type="text" maxlength="10" autocapitalize="characters" spellcheck="false" placeholder="例如 B09V366BDY" required><small>10 位，必须以 B0 开头；已有资料会自动带出</small></label>
+          <label class="field file-field"><span>广告搜索词报表</span><input id="report-file" name="report" type="file" accept=".xlsx,.csv" required><small id="file-name">尚未选择文件</small></label>
+        </div>
+        <fieldset class="product-profile-fields">
+          <legend>绑定产品资料</legend>
+          <p id="profile-status" class="profile-status">输入完整 ASIN 后查询已绑定资料。</p>
+          <div class="product-profile-grid">
+            <label class="field"><span>产品名称</span><input id="product-name" name="productName" type="text" maxlength="200" placeholder="例如：讲道笔记本" required></label>
+            <label class="field"><span>产品标题</span><textarea id="product-title" name="productTitle" rows="3" maxlength="1000" placeholder="粘贴美国站 Listing 完整标题" required></textarea></label>
+            <label class="field"><span>产品功能</span><textarea id="product-features" name="productFeatures" rows="4" maxlength="3000" placeholder="每行填写一项已确认功能，或使用分号分隔" required></textarea><small>只写已确认功能，不要猜测。</small></label>
+            <label class="field"><span>产品场景</span><textarea id="product-scenes" name="productScenes" rows="4" maxlength="3000" placeholder="每行填写一个常用场景，或使用分号分隔" required></textarea><small>豆包只根据这里的场景做关联判断。</small></label>
+          </div>
+        </fieldset>
         <button id="task-submit" class="primary-button submit-task" type="submit">提交任务</button>
       </form>
     </section>
