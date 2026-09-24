@@ -23,10 +23,12 @@
       <div class="panel-title"><div><p class="step-label">STEP 01</p><h2 id="submit-title">提交资料</h2></div><p>.xlsx / .csv，最大 10 MB</p></div>
       <div id="submit-message" class="message" role="status" hidden></div>
       <form id="task-form" class="task-form" novalidate>
+        <div id="reuse-summary" class="analysis-rule-bar" hidden><div><strong>复用已有数据重新分析</strong><p id="reuse-description"></p><small>仅按本次规则重算，不刷新市场数据、不新增外部取数。旧报告保留；留底不完整时停止，不自动改为付费分析。</small></div><button id="cancel-reuse" type="button" class="secondary-button">改为上传新报表</button></div>
         <div class="task-primary-fields">
           <label class="field asin-field"><span>ASIN</span><input id="asin" name="asin" type="text" maxlength="10" autocapitalize="characters" spellcheck="false" placeholder="例如 B09V366BDY" required><small>10 位，必须以 B0 开头</small></label>
           <label class="field file-field"><span>广告搜索词报表</span><input id="report-file" name="report" type="file" accept=".xlsx,.csv" required><small id="file-name">尚未选择文件</small></label>
         </div>
+        <div class="analysis-rule-bar"><div><strong id="rule-state">使用默认判定标准</strong><p id="rule-preview">优先放量：订单 ≥ 2｜ABA 转化份额排名前 3｜ACOS &lt; 25%；控制成本：点击 &gt; 15 且零订单</p></div><button id="open-rule-settings" type="button" class="secondary-button">设置</button></div>
         <button id="task-submit" class="primary-button submit-task" type="submit">提交任务</button>
       </form>
     </section>
@@ -36,7 +38,7 @@
       <div id="tasks-message" class="message" role="status" hidden></div>
       <div class="table-scroll">
         <table class="task-table">
-          <thead><tr><th>提交时间</th><th>ASIN</th><th>状态</th><th>失败原因</th><th>报告</th></tr></thead>
+          <thead><tr><th>提交时间</th><th>ASIN</th><th>状态</th><th>失败原因</th><th>报告／重新分析</th></tr></thead>
           <tbody id="tasks-body"><tr><td colspan="5" class="empty-cell">正在加载任务…</td></tr></tbody>
         </table>
       </div>
@@ -44,6 +46,23 @@
     </section>
   </main>
 
+  <dialog id="rule-settings" aria-labelledby="rule-settings-title">
+    <form id="rule-settings-form" novalidate>
+      <div class="panel-title"><h2 id="rule-settings-title">分析判定设置</h2><button id="cancel-rules" type="button" class="text-button">取消</button></div>
+      <p>仅用于接下来提交的分析。已生成的报告保持原标准与结果。</p>
+      <div id="rules-error" class="message" role="alert" hidden></div>
+      <h3>优先放量 · 同时满足</h3>
+      <label class="field"><span>最低订单数（≥）</span><input id="rule-orders" type="number" min="1" max="1000000" step="1" required></label>
+      <label class="field"><span>我的 ASIN 在 ABA 转化份额中的排名（前 N 名）</span><input id="rule-rank" type="number" min="1" max="3" step="1" required><small>按返回的 ABA 候选 ASIN 转化份额排序；并列同名次，非全站全部 ASIN 排名。</small></label>
+      <label class="field"><span>ACOS 上限（严格小于，%）</span><input id="rule-acos" type="number" min="0.01" max="1000" step="0.01" required></label>
+      <h3>控制成本 · 同时满足</h3>
+      <label class="field"><span>点击门槛（严格大于）</span><input id="rule-clicks" type="number" min="0" max="1000000" step="1" required><small>且订单数等于 0。</small></label>
+      <p class="rules-explanation">数据不足：必要字段缺失，且现有数据无法确定打法。零订单不等于缺失。其余归为继续观察，不设最低点击门槛。</p>
+      <div class="rule-actions"><button id="default-rules" type="button" class="secondary-button">恢复默认</button><button type="submit" class="primary-button">应用设置</button></div>
+    </form>
+  </dialog>
+  <script src="../assets/analysis-rules.js"></script>
+  <script src="../assets/rule-settings.js"></script>
   <script src="../assets/vendor/supabase.js"></script>
   <script src="../assets/config.js"></script>
   <script src="../assets/common.js"></script>
