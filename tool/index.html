@@ -53,7 +53,6 @@
       <div id="rules-error" class="message" role="alert" hidden></div>
       <h3>优先放量 · 同时满足</h3>
       <label class="field"><span>最低订单数（≥）</span><input id="rule-orders" type="number" min="1" max="1000000" step="1" required></label>
-      <label class="field"><span>我的 ASIN 在 ABA 转化份额中的排名（前 N 名）</span><input id="rule-rank" type="number" min="1" max="3" step="1" required><small>按返回的 ABA 候选 ASIN 转化份额排序；并列同名次，非全站全部 ASIN 排名。</small></label>
       <label class="field"><span>ACOS 上限（严格小于，%）</span><input id="rule-acos" type="number" min="0.01" max="1000" step="0.01" required></label>
       <h3>控制成本 · 同时满足</h3>
       <label class="field"><span>点击门槛（严格大于）</span><input id="rule-clicks" type="number" min="0" max="1000000" step="1" required><small>且订单数等于 0。</small></label>
@@ -61,8 +60,8 @@
       <div class="rule-actions"><button id="default-rules" type="button" class="secondary-button">恢复默认</button><button type="submit" class="primary-button">应用设置</button></div>
     </form>
   </dialog>
-  <script src="../assets/analysis-rules.js"></script>
-  <script src="../assets/rule-settings.js"></script>
+  <script src="../assets/analysis-rules.js?v=2"></script>
+  <script src="../assets/rule-settings.js?v=2"></script>
   <script src="../assets/vendor/supabase.js"></script>
   <script src="../assets/config.js"></script>
   <script src="../assets/common.js"></script>
