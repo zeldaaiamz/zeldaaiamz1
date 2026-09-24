@@ -76,7 +76,14 @@
           .from(config.reportBucket)
           .download(task.report_url);
         if (downloadError) throw downloadError;
-        frame.srcdoc = await data.text();
+        const originalHtml = await data.text();
+        try {
+          if (!window.KeywordBattleImageModule) throw new Error('图片模块加载器不可用');
+          frame.srcdoc = await window.KeywordBattleImageModule.upgrade(originalHtml);
+        } catch (error) {
+          frame.srcdoc = originalHtml;
+          showMessage(message, '报告已加载，但图片模块资源暂时不可用，请刷新页面重试。');
+        }
         loading.hidden = true;
         view.hidden = false;
         reportLoaded = true;
