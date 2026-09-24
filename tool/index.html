@@ -54,14 +54,17 @@
       <h3>优先放量 · 同时满足</h3>
       <label class="field"><span>最低订单数（≥）</span><input id="rule-orders" type="number" min="1" max="1000000" step="1" required></label>
       <label class="field"><span>ACOS 上限（严格小于，%）</span><input id="rule-acos" type="number" min="0.01" max="1000" step="0.01" required></label>
-      <h3>控制成本 · 同时满足</h3>
-      <label class="field"><span>点击门槛（严格大于）</span><input id="rule-clicks" type="number" min="0" max="1000000" step="1" required><small>且订单数等于 0。</small></label>
-      <p class="rules-explanation">数据不足：必要字段缺失，且现有数据无法确定打法。零订单不等于缺失。其余归为继续观察，不设最低点击门槛。</p>
+      <h3>控制成本 · 满足任一组条件</h3>
+      <label class="field"><span>已出单词：ACOS 起点（≥，%）</span><input id="rule-cost-acos" type="number" min="0.01" max="1000" step="0.01" required><small>订单数 ≥ 1 单，且 ACOS 达到此值。</small></label>
+      <label class="field"><span>零订单词：点击门槛（≥）</span><input id="rule-clicks" type="number" min="1" max="1000000" step="1" required><small>且订单数等于 0。</small></label>
+      <h3>继续观察 · 自动计算</h3>
+      <p id="observation-preview" aria-live="polite"></p>
+      <p class="rules-explanation">数据不足：必要字段缺失，且现有数据无法确定打法。零订单不等于缺失。观察范围随以上阈值自动调整，不与放量、控成本重叠。</p>
       <div class="rule-actions"><button id="default-rules" type="button" class="secondary-button">恢复默认</button><button type="submit" class="primary-button">应用设置</button></div>
     </form>
   </dialog>
-  <script src="../assets/analysis-rules.js?v=2"></script>
-  <script src="../assets/rule-settings.js?v=2"></script>
+  <script src="../assets/analysis-rules.js?v=3"></script>
+  <script src="../assets/rule-settings.js?v=3"></script>
   <script src="../assets/vendor/supabase.js"></script>
   <script src="../assets/config.js"></script>
   <script src="../assets/common.js"></script>
