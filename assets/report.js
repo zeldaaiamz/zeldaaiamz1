@@ -5,6 +5,17 @@
   if (!app) return;
   const { client, config, showMessage, hideMessage, humanError, requireSession, statusClass, formatTime } = app;
 
+  function withComparisonEntry(html) {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const panel = doc.querySelector('[data-module-panel="04"]');
+    if (!panel || panel.querySelector('.cc-root')) return html;
+    const menu = doc.querySelector('[data-module="04"]');
+    if (menu) { menu.classList.remove('upcoming'); const hint=menu.querySelector('small'); if(hint)hint.textContent='选择竞对后生成'; }
+    panel.innerHTML='<div class="placeholder"><span>04</span><h2>竞对对比</h2><p>复用这份报告的留底，选择 3–5 家竞对并确认取数额度。</p><button type="button" id="open-comparison-task" style="padding:12px 22px;border:0;border-radius:8px;background:#16775e;color:white;cursor:pointer">选择竞对，发起对比</button><p style="font-size:13px">进入表单不扣额度；清洗确认后才生成正式结论。</p></div>';
+    const script=doc.createElement('script');script.textContent="document.getElementById('open-comparison-task').addEventListener('click',function(){parent.postMessage({type:'keyword-battle-open-comparison'},'*');});";doc.body.append(script);
+    return '<!doctype html>'+doc.documentElement.outerHTML;
+  }
+
   async function start() {
     const session = await requireSession();
     if (!session) return;
@@ -18,7 +29,9 @@
     let currentTask = null;
 
     window.addEventListener('message', async (event) => {
-      if (event.source !== frame.contentWindow || event.data?.type !== 'keyword-battle-download-source') return;
+      if (event.source !== frame.contentWindow) return;
+      if (event.data?.type === 'keyword-battle-open-comparison' && currentTask?.status === '已完成') { window.location.assign(app.route('competitor-comparison/?source='+encodeURIComponent(currentTask.id))); return; }
+      if (event.data?.type !== 'keyword-battle-download-source') return;
       if (!currentTask?.upload_path) return;
       try {
         const { data, error } = await client.storage.from(config.storageBucket).download(currentTask.upload_path);
@@ -79,9 +92,9 @@
         const originalHtml = await data.text();
         try {
           if (!window.KeywordBattleImageModule) throw new Error('图片模块加载器不可用');
-          frame.srcdoc = await window.KeywordBattleImageModule.upgrade(originalHtml);
+          frame.srcdoc = withComparisonEntry(await window.KeywordBattleImageModule.upgrade(originalHtml));
         } catch (error) {
-          frame.srcdoc = originalHtml;
+          frame.srcdoc = withComparisonEntry(originalHtml);
           showMessage(message, '报告已加载，但图片模块资源暂时不可用，请刷新页面重试。');
         }
         loading.hidden = true;
