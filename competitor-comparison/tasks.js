@@ -19,7 +19,7 @@ async function refresh(){
 }
 function render(task){
  const next=JSON.stringify(task);if(next===signature)return;signature=next;
- $('task-detail').hidden=false;$('detail-title').textContent=task.asin+' · 竞对对比';$('detail-phase').textContent=phaseLabel[task.comparison_phase]||task.status;$('detail-id').textContent=task.id;
+ $('task-detail').hidden=false;$('detail-title').textContent=task.asin+' · 竞对对比';$('detail-phase').textContent=task.status==='失败'?'失败':phaseLabel[task.comparison_phase]||task.status;$('detail-id').textContent=task.id;
  const box=$('detail-content');box.replaceChildren();
  if(task.status==='失败'){box.append(node('p',task.failure_reason||'任务失败；未自动重复取数。'));return;}
  if(task.status==='已完成'&&task.report_url){const a=node('a','打开正式报告','primary-button');a.href=route('report/?task='+encodeURIComponent(task.id));box.append(a);return;}
@@ -40,7 +40,7 @@ function selection(task,box){
  function values(){return inputs().map(i=>i.value.trim().toUpperCase());}
  function update(){const asins=values();ack.checked=false;const n=asins.filter(Boolean).length;add.disabled=inputs().length>=5;const valid=n>=3&&n<=5&&asins.every(a=>/^[A-Z0-9]{10}$/.test(a))&&new Set([task.asin,...asins]).size===n+1;
   checks.forEach(c=>{c.checked=asins.includes(c.value);c.disabled=!c.checked&&inputs().length>=5&&!inputs().some(i=>!i.value.trim());});
-  quote.textContent=pricing.verified?`产品详情 ${n+1} 次请求 × ${pricing.productDetail} 额度 + 品类特征 1 次请求 × ${pricing.categoryFeature} 额度 = ${(n+1)*pricing.productDetail+pricing.categoryFeature} 次额度。调用范围：我方 + ${n} 家竞对。历史核对余额 ${pricing.remainingObserved??'未知'}（${pricing.remainingObservedDate||'未核对'}，非实时余额）。不购买资源包，西柚新增调用为 0。`:'费用口径尚未核实，暂不能取数。';
+  quote.textContent=pricing.verified?`产品详情 ${n+1} 次请求 × ${pricing.productDetail} 额度 + 品类特征 1 次请求 × ${pricing.categoryFeature} 额度 = ${(n+1)*pricing.productDetail+pricing.categoryFeature} 次额度。调用范围：我方 + ${n} 家竞对。历史核对余额 ${pricing.remainingObserved??'未知'}（${pricing.remainingObservedDate||'未核对'}，非实时余额）。不购买资源包，西柚新增调用为 0。`:'Sorftime 当前可用额度为 0，取数已暂停；恢复额度后才能确认名单。';
   submit.disabled=!valid||!pricing.verified;}
  function addRow(value=''){if(inputs().length>=5)return;const row=node('div',undefined,'asin-row');const input=document.createElement('input');input.value=value;input.maxLength=10;input.setAttribute('aria-label','竞对 ASIN');input.placeholder='10 位 ASIN';const remove=node('button','移除','secondary-button');remove.type='button';remove.addEventListener('click',()=>{row.remove();update();});input.addEventListener('input',()=>{input.value=input.value.toUpperCase();update();});row.append(node('span','竞对'),input,remove);rows.append(row);update();return input;}
  for(const c of state.candidates||[]){const label=node('label',undefined,'candidate');const check=document.createElement('input');check.type='checkbox';check.value=c.asin;checks.push(check);const details=node('div');if(typeof c.imageUrl==='string'&&/^https:\/\//.test(c.imageUrl)){const img=document.createElement('img');img.src=c.imageUrl;img.alt=c.asin+' 主图';img.loading='lazy';img.referrerPolicy='no-referrer';img.addEventListener('error',()=>{img.replaceWith(node('small','图片未返回'));});details.append(img);}else details.append(node('small','主图未返回'));
