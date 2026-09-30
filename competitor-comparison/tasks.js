@@ -37,18 +37,29 @@ function selection(task,box){
  const quote=node('div',undefined,'quote-box');
  const approval=node('label',undefined,'approval');const ack=document.createElement('input');ack.type='checkbox';approval.append(ack,node('span','我已核对名单与下方额度，确认只补取这些产品详情及 1 次品类特征；此步不调用豆包。'));
  const submit=node('button','确认名单与额度，开始取数','primary-button');submit.type='button';
+ const readiness=node('p',undefined,'selection-readiness');readiness.setAttribute('role','status');readiness.setAttribute('aria-live','polite');
  function values(){return inputs().map(i=>i.value.trim().toUpperCase());}
- function update(){const asins=values();ack.checked=false;const n=asins.filter(Boolean).length;add.disabled=inputs().length>=5;const valid=n>=3&&n<=5&&asins.every(a=>/^[A-Z0-9]{10}$/.test(a))&&new Set([task.asin,...asins]).size===n+1;
+ function updateReadiness(){const asins=values(),n=asins.filter(Boolean).length,issues=[];
+  if(n<3)issues.push(`还需添加 ${3-n} 家竞对（需选 3–5 家）`);
+  if(asins.some(a=>!a)&&n>=3)issues.push('请填满或移除空白的竞对行');
+  if(asins.some(a=>a&&!/^[A-Z0-9]{10}$/.test(a)))issues.push('竞对 ASIN 须为 10 位字母或数字');
+  if(new Set([task.asin,...asins.filter(Boolean)]).size!==n+1)issues.push('竞对不能与我方或其他竞对重复');
+  if(!pricing.verified)issues.push('Sorftime 当前可用额度为 0，取数已暂停');
+  if(!issues.length&&!ack.checked)issues.push('请勾选额度确认');
+  readiness.textContent=issues.length?issues.join('；')+'。':'名单与额度已确认，可以开始取数。';
+  submit.disabled=issues.length>0;}
+ function update(){const asins=values();ack.checked=false;const n=asins.filter(Boolean).length;add.disabled=inputs().length>=5;
   checks.forEach(c=>{c.checked=asins.includes(c.value);c.disabled=!c.checked&&inputs().length>=5&&!inputs().some(i=>!i.value.trim());});
   quote.textContent=pricing.verified?`产品详情 ${n+1} 次请求 × ${pricing.productDetail} 额度 + 品类特征 1 次请求 × ${pricing.categoryFeature} 额度 = ${(n+1)*pricing.productDetail+pricing.categoryFeature} 次额度。调用范围：我方 + ${n} 家竞对。历史核对余额 ${pricing.remainingObserved??'未知'}（${pricing.remainingObservedDate||'未核对'}，非实时余额）。不购买资源包，西柚新增调用为 0。`:'Sorftime 当前可用额度为 0，取数已暂停；恢复额度后才能确认名单。';
-  submit.disabled=!valid||!pricing.verified;}
+  updateReadiness();}
  function addRow(value=''){if(inputs().length>=5)return;const row=node('div',undefined,'asin-row');const input=document.createElement('input');input.value=value;input.maxLength=10;input.setAttribute('aria-label','竞对 ASIN');input.placeholder='10 位 ASIN';const remove=node('button','移除','secondary-button');remove.type='button';remove.addEventListener('click',()=>{row.remove();update();});input.addEventListener('input',()=>{input.value=input.value.toUpperCase();update();});row.append(node('span','竞对'),input,remove);rows.append(row);update();return input;}
  for(const c of state.candidates||[]){const label=node('label',undefined,'candidate');const check=document.createElement('input');check.type='checkbox';check.value=c.asin;checks.push(check);const details=node('div');if(typeof c.imageUrl==='string'&&/^https:\/\//.test(c.imageUrl)){const img=document.createElement('img');img.src=c.imageUrl;img.alt=c.asin+' 主图';img.loading='lazy';img.referrerPolicy='no-referrer';img.addEventListener('error',()=>{img.replaceWith(node('small','图片未返回'));});details.append(img);}else details.append(node('small','主图未返回'));
  details.append(node('b',c.asin),node('small',`出现 ${c.count} 次`),node('small',c.keywords.join(' · ')));label.append(check,details);grid.append(label);
  check.addEventListener('change',()=>{if(check.checked){const empty=inputs().find(i=>!i.value.trim());if(empty)empty.value=c.asin;else addRow(c.asin);}else inputs().filter(i=>i.value===c.asin).forEach(i=>i.parentElement.remove());update();});}
  add.addEventListener('click',()=>addRow()?.focus());
+ ack.addEventListener('change',updateReadiness);
  submit.addEventListener('click',()=>{if(!ack.checked){error(Error('请先勾选额度确认。'));return;}const asins=values();action(submit,()=>rpc('confirm_keyword_competitors',{p_task_id:task.id,p_asins:asins,p_max_calls:asins.length+2,p_max_cost:(asins.length+1)*pricing.productDetail+pricing.categoryFeature,p_unit:pricing.unit}));});
- box.append(grid,node('h3','对比产品'),node('p','自己：'+task.asin),rows,add,quote,approval,submit);update();
+ box.append(grid,node('h3','对比产品'),node('p','自己：'+task.asin),rows,add,quote,approval,readiness,submit);update();
 }
 function review(task,box){
  const state=task.comparison_state;box.append(node('p',`核心词：${state.coreKeyword} ｜ 完整特征 ${state.features.length} 条。保留名称、顺序和占比；逐项确认后才生成结论。`,'quiet'));
