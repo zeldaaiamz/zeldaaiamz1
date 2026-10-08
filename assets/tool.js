@@ -10,7 +10,7 @@
 
   function taskRow(task, onReuse, onReview) {
     const row = document.createElement('tr');
-    const phaseLabel = task.status === '失败' ? task.status : window.KeywordComparison.phaseLabels[task.comparison_phase] || task.status;
+    const phaseLabel = window.KeywordComparison.taskLabel(task);
     const values = [formatTime(task.created_at), task.asin, phaseLabel, task.failure_reason || '—'];
     values.forEach((value, index) => {
       const cell = document.createElement('td');
@@ -131,7 +131,7 @@
       refreshButton.disabled = true;
       try {
         const { data, error } = await client.from('keyword_tasks')
-          .select('id,asin,status,created_at,report_url,failure_reason,upload_path,comparison_phase,comparison_request,core_keyword')
+          .select('id,asin,status,created_at,report_url,failure_reason,upload_path,comparison_phase,comparison_request,core_keyword,comparison_pricing:comparison_state->pricing')
           .order('created_at', { ascending: false })
           .limit(config.taskLimit || 10);
         if (error) throw error;
@@ -152,7 +152,7 @@
             try {
               const {error}=await client.rpc('create_keyword_comparison',{p_task_id:crypto.randomUUID(),p_source_id:t.id,p_core_keyword:'',p_site:'US'});
               if(error)throw error;
-              showMessage(submitMessage,'正在根据原留底整理候选，无外部取数。刷新后点击“待选择／确认竞对”。','success');
+              showMessage(submitMessage,'正在根据原留底整理候选，无外部取数。刷新后点击“待选择竞对”。','success');
               await loadTasks();
             }catch(error){showMessage(submitMessage,humanError(error));}finally{submitting=false;}
           }, t => window.KeywordComparison.open(t, app, loadTasks, (source,asins,id)=>selectSource(source,true,asins,id)))));

@@ -9,6 +9,16 @@
     return { competitorAsins: asins, coreKeyword };
   }
   const phaseLabels = {keywords:'分析关键词中',prepare:'整理竞对名单中',awaiting_selection:'待选择／确认竞对',collect:'竞对取数中',awaiting_review:'待确认特征清洗',suggest:'生成清洗建议中',needs_evidence:'产品资料待补齐',judge:'逐条核对中',complete:'已完成'};
+  function taskLabel(task) {
+    if (task.status === '失败') return task.status;
+    if (task.comparison_phase === 'awaiting_selection') {
+      const asins = task.comparison_request?.competitorAsins || task.comparison_state?.competitorAsins || [];
+      if (asins.length < 3) return '待选择竞对';
+      const pricing = task.comparison_state?.pricing || task.comparison_pricing;
+      return pricing?.verified ? '名单已保存 · 待确认取数费用' : '名单已保存 · 取数暂未开放';
+    }
+    return phaseLabels[task.comparison_phase] || task.status;
+  }
   function share(value, display) {
     if (typeof display === 'string') return display;
     return value === null || value === undefined ? '未返回' : `${value}%`;
@@ -32,7 +42,7 @@
       if (error) throw error;
       const state = t.comparison_state || {};
       body.replaceChildren(element('p', `自己 ${t.asin} · 核心词：${state.coreKeyword || '未返回'}`));
-      body.append(element('p', `阶段：${phaseLabels[t.comparison_phase] || t.comparison_phase}`));
+      body.append(element('p', `阶段：${taskLabel(t)}`));
       const submit = async (button, name, args) => {
         app.hideMessage(message); button.disabled = true;
         try {
@@ -69,13 +79,13 @@
           };
           body.append(grid,button);return;
         }
-        body.append(element('p', `竞对：${asins.join('、')}`));
+        body.append(element('p', `名单已保存，无需重新选择或重复提交。已选竞对：${asins.join('、')}`));
         const candidates = new Map((state.candidates || []).map(c => [c.asin,c]));
         const list = element('ul');
         asins.forEach(asin => { const c=candidates.get(asin); list.append(element('li', `${asin}：${c ? `出现在 ${c.count} 个词的 ABA Top3：${c.keywords.join('、')}` : '未在当前关键词留底的 ABA Top3 中出现；保留你填写的名单'}`)); });
         body.append(list);
         const p=state.pricing;
-        if (!p?.verified || !p.unit || !p.reference || ![p.productDetail,p.categoryFeature].every(n=>Number.isFinite(n)&&n>=0)) { body.append(element('p',state.notice || '取数费用尚未核实。')); return; }
+        if (!p?.verified || !p.unit || !p.reference || ![p.productDetail,p.categoryFeature].every(n=>Number.isFinite(n)&&n>=0)) { body.append(element('p','当前无法开始取数：服务端尚未启用取数或核实费用。名单已保留；待配置就绪并更新本任务报价后，再在此确认费用。重复提交不会解除此限制。')); return; }
         const calls=asins.length+2,cost=(asins.length+1)*p.productDetail+p.categoryFeature;
         body.append(element('p',`${asins.length+1} 次产品资料 + 1 次同类产品特征，共 ${calls} 次调用，预计 ${cost} ${p.unit}。`));
         body.append(element('p',`费用依据：${p.reference}`));
@@ -135,7 +145,7 @@
       } else { body.append(element('p',state.notice || '当前阶段无需确认，请稍后刷新任务。')); if(state.rawFeatureResponse){const details=element('details'),summary=element('summary','查看接口原始返回（已留底）');details.append(summary,element('pre',JSON.stringify(state.rawFeatureResponse,null,2)));body.append(details);} }
     } catch (e) { app.showMessage(message,app.humanError(e)); }
   }
-  const api={request,phaseLabels,share,open};
+  const api={request,phaseLabels,taskLabel,share,open};
   if (typeof module !== 'undefined' && module.exports) module.exports=api;
   else root.KeywordComparison=Object.freeze(api);
 }(typeof window !== 'undefined' ? window : globalThis));
