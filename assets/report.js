@@ -86,13 +86,16 @@
           .download(task.report_url);
         if (downloadError) throw downloadError;
         const originalHtml = await data.text();
-        try {
-          if (!window.KeywordBattleImageModule) throw new Error('图片模块加载器不可用');
-          frame.srcdoc = withoutComparison(await window.KeywordBattleImageModule.upgrade(originalHtml));
-        } catch (error) {
-          frame.srcdoc = withoutComparison(originalHtml);
-          showMessage(message, '报告已加载，但图片模块资源暂时不可用，请刷新页面重试。');
+        let reportHtml = originalHtml;
+        const unavailable = [];
+        for (const [name, module] of [['图片', window.KeywordBattleImageModule], ['广告', window.KeywordBattleAdModule]]) {
+          try {
+            if (!module) throw new Error('模块加载器不可用');
+            reportHtml = await module.upgrade(reportHtml);
+          } catch { unavailable.push(name); }
         }
+        frame.srcdoc = withoutComparison(reportHtml);
+        if (unavailable.length) showMessage(message, `报告已加载，但${unavailable.join('、')}模块资源暂时不可用，请刷新页面重试。`);
         loading.hidden = true;
         view.hidden = false;
         reportLoaded = true;

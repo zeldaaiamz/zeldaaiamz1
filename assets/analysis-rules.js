@@ -10,6 +10,14 @@
       if (![r.maxAcos, r.costAcos].every(v => typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= 10)) throw new Error('ACOS 阈值须大于 0% 且不超过 1000%');
       if (r.costAcos < r.maxAcos) throw new Error('控成本 ACOS 起点不能低于放量 ACOS 上限，避免分类重叠');
       if (!Number.isInteger(r.costClicks) || r.costClicks < 1 || r.costClicks > 1000000) throw new Error('零订单点击门槛须为 1–1000000 的整数');
+      if (input.adPlan !== undefined) {
+        const a = input.adPlan;
+        if (!a || typeof a !== 'object' || Array.isArray(a)) throw new Error('广告规则格式不正确');
+        if (!Number.isInteger(a.topRank) || a.topRank < 1 || a.topRank > 100) throw new Error('守位排名须为1–100的整数');
+        if (!Number.isFinite(a.risingAcosCap) || a.risingAcosCap < r.costAcos || a.risingAcosCap > 10) throw new Error('上涨观察ACOS上限不得低于降投起点，且不超过1000%');
+        if (!Number.isInteger(a.observationDays) || a.observationDays < 1 || a.observationDays > 90) throw new Error('观察天数须为1–90的整数');
+        r.adPlan = {topRank:a.topRank, risingAcosCap:a.risingAcosCap, observationDays:a.observationDays};
+      }
       return r;
     }
     if (![1, 2].includes(result.version)) throw new Error('不支持的规则版本');

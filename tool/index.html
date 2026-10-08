@@ -15,8 +15,8 @@
 
   <main class="page-shell">
     <section class="page-intro">
-      <div><p class="eyebrow">CREATE A BATTLE REPORT</p><h1>创建关键词任务</h1><p>输入美国站 ASIN，上传广告搜索词报表，工人会自动生成作战总表。</p></div>
-      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center"><a class="secondary-button" href="../ad-diagnosis/">广告诊断与优化 · 页面预览</a><div class="status-badge neutral"><i></i>工人每 30 秒检查新任务</div></div>
+      <div><p class="eyebrow">CREATE A BATTLE REPORT</p><h1>创建关键词任务</h1><p>输入美国站 ASIN，上传广告搜索词报表，提交后生成任务报告，广告诊断整合在报告「06」中，无需再次上传。</p></div>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center"><div class="status-badge neutral"><i></i>工人每 30 秒检查新任务</div></div>
     </section>
 
     <section class="panel submit-panel" aria-labelledby="submit-title">
@@ -57,14 +57,19 @@
       <h3>控制成本 · 满足任一组条件</h3>
       <label class="field"><span>已出单词：ACOS 起点（≥，%）</span><input id="rule-cost-acos" type="number" min="0.01" max="1000" step="0.01" required><small>订单数 ≥ 1 单，且 ACOS 达到此值。</small></label>
       <label class="field"><span>零订单词：点击门槛（≥）</span><input id="rule-clicks" type="number" min="1" max="1000000" step="1" required><small>且订单数等于 0。</small></label>
+      <h3>广告06 · 守位与上涨观察例外</h3>
+      <label class="field"><span>低 ACOS 守位范围（自然位前 N 名）</span><input id="rule-top-rank" type="number" min="1" max="100" step="1" required></label>
+      <label class="field"><span>排名上涨：最高容忍 ACOS（≤，%）</span><input id="rule-rising-acos" type="number" min="0.01" max="1000" step="0.01" required></label>
+      <label class="field"><span>排名上涨：观察期限（天）</span><input id="rule-observation-days" type="number" min="1" max="90" step="1" required></label>
+      <p>前述订单、ACOS与零单点击阈值也用于广告06。只有可核验的历史排名上涨才能触发观察例外；排名缺失不阻止按广告表现加投。该停是暂停投放候选，不自动精准或词组否定。</p>
       <h3>继续观察 · 自动计算</h3>
       <p id="observation-preview" aria-live="polite"></p>
       <p class="rules-explanation">数据不足：必要字段缺失，且现有数据无法确定打法。零订单不等于缺失。观察范围随以上阈值自动调整，不与放量、控成本重叠。</p>
       <div class="rule-actions"><button id="default-rules" type="button" class="secondary-button">恢复默认</button><button type="submit" class="primary-button">应用设置</button></div>
     </form>
   </dialog>
-  <script src="../assets/analysis-rules.js?v=3"></script>
-  <script src="../assets/rule-settings.js?v=3"></script>
+  <script src="../assets/analysis-rules.js?v=20261008-ad6"></script>
+  <script src="../assets/rule-settings.js?v=20261008-ad6"></script>
   <script src="../assets/vendor/supabase.js"></script>
   <script src="../assets/config.js"></script>
   <script src="../assets/common.js"></script>
