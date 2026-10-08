@@ -5,14 +5,6 @@
   if (!app) return;
   const { client, config, showMessage, hideMessage, humanError, requireSession, statusClass, formatTime } = app;
 
-  function withoutComparison(html) {
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-    const removed = doc.querySelectorAll('[data-module="04"], [data-module-panel="04"]');
-    if (!removed.length) return html;
-    removed.forEach(element => element.remove());
-    return '<!doctype html>'+doc.documentElement.outerHTML;
-  }
-
   async function start() {
     const session = await requireSession();
     if (!session) return;
@@ -94,7 +86,7 @@
             reportHtml = await module.upgrade(reportHtml);
           } catch { unavailable.push(name); }
         }
-        frame.srcdoc = withoutComparison(reportHtml);
+        frame.srcdoc = reportHtml;
         if (unavailable.length) showMessage(message, `报告已加载，但${unavailable.join('、')}模块资源暂时不可用，请刷新页面重试。`);
         loading.hidden = true;
         view.hidden = false;
