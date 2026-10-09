@@ -100,7 +100,7 @@
         body.append(element('p',`整理后共 ${(state.features || []).length} 条；按月销量占比降序，尚未清洗。前五条：${(state.features || []).slice(0,5).map(f=>`${f.product_feature}（产品 ${f.product_count_share}% / 月销 ${f.monthly_sales_share}%）`).join('；')}`));
         body.append(element('p',`样本信息：${typeof state.sampleStats==='object' ? JSON.stringify(state.sampleStats) : state.sampleStats || '未返回'}`));
         const own=state.products?.[0];
-        if(own){const evidence=element('details'),summary=element('summary','查看自己产品的标题、五点和属性原文');evidence.append(summary,element('pre',JSON.stringify({asin:own.asin,title:own.title,bullets:own.bullets,attributes:own.attributes},null,2)));body.append(evidence);}
+        if(own){const evidence=element('details'),summary=element('summary',own.evidenceMode==='title-description-attributes'?'查看自己产品的标题、产品描述和已返回属性原文':'查看自己产品的标题、五点和属性原文');evidence.append(summary,element('pre',JSON.stringify({asin:own.asin,title:own.title,description:own.description,bullets:own.bullets,attributes:own.attributes,evidencePolicy:own.evidencePolicy,missingFields:own.missingFields},null,2)));body.append(evidence);}
         if(!state.cleaningSuggestions && state.cleaningQuote){
           const note=element('p',`可先生成逐条清洗建议：最多 ${state.cleaningQuote.maxCalls} 次文本调用，上限 ¥${state.cleaningQuote.maxCny}。建议仅供审核，未经确认不写入清洗结果文件。`);
           const button=element('button','批准上述费用并生成清洗建议','secondary-button');button.type='button';
