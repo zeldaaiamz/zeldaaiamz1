@@ -19,15 +19,16 @@
     return `${hours ? `${hours}小时` : ''}${hours || minutes ? `${minutes}分` : ''}${remainder}秒`;
   }
 
-  function taskRow(task, onReuse, onReview) {
+  function taskRow(task, onReuse, onReview, onControl) {
     const row = document.createElement('tr');
-    const phaseLabel = window.KeywordComparison.taskLabel(task);
+    const control = task.control_state || 'running';
+    const phaseLabel = control === 'paused' ? '已暂停' : control === 'pausing' ? '正在暂停' : window.KeywordComparison.taskLabel(task);
     const values = [formatTime(task.created_at), task.asin, phaseLabel, formatProcessingTime(task), task.failure_reason || '—'];
     values.forEach((value, index) => {
       const cell = document.createElement('td');
       if (index === 2) {
         const chip = document.createElement('span');
-        chip.className = `status-chip ${statusClass(task.status)}`;
+        chip.className = `status-chip ${statusClass(control === 'running' ? task.status : '待处理')}`;
         chip.textContent = value;
         cell.append(chip);
       } else {
@@ -55,11 +56,21 @@
       compare.addEventListener('click', () => onReuse(task, true));
       actionCell.append(compare);
       }
-    } else if (task.status === '进行中' && ['awaiting_selection','awaiting_review','needs_evidence'].includes(task.comparison_phase)) {
+    } else if (control === 'running' && task.status === '进行中' && ['awaiting_selection','awaiting_review','needs_evidence'].includes(task.comparison_phase)) {
       const review = document.createElement('button'); review.type = 'button'; review.className = 'table-action';
       review.textContent = phaseLabel; review.addEventListener('click', () => onReview(task)); actionCell.append(review);
     } else {
       actionCell.textContent = '—';
+    }
+    if (['待处理','进行中'].includes(task.status)) {
+      if (actionCell.textContent === '—') actionCell.textContent = '';
+      const button = document.createElement('button');
+      button.type = 'button'; button.className = 'text-button';
+      button.textContent = control === 'paused' ? '重新启动' : control === 'pausing' ? '正在暂停…' : '暂停';
+      button.disabled = control === 'pausing';
+      button.title = control === 'paused' ? '继续本任务，复用已保存的数据' : '当前请求结束并保存后暂停，其他任务继续';
+      button.addEventListener('click', () => onControl(task, control === 'paused' ? 'resume' : 'pause', button));
+      actionCell.append(button);
     }
     row.append(actionCell);
     return row;
@@ -116,12 +127,28 @@
       asinInput.value = asinInput.value.toUpperCase();
     });
 
+    const pendingControls = new Set();
+    async function controlTask(task, action, button) {
+      if (pendingControls.has(task.id)) return;
+      pendingControls.add(task.id); button.disabled = true;
+      try {
+        const {data, error} = await client.rpc('control_keyword_task', {p_task_id: task.id, p_action: action});
+        if (error) throw error;
+        await loadTasks();
+        showMessage(taskMessage, action === 'resume'
+          ? '已重新启动：将复用已保存的数据，按队列继续；待确认阶段仍需完成原有确认。'
+          : data === 'paused' ? '任务已暂停，已保存的数据保留。'
+          : '已请求暂停：等待当前请求结束并保存数据；已发出的请求仍可能计费。', 'success');
+      } catch (error) { showMessage(taskMessage, humanError(error)); }
+      finally { pendingControls.delete(task.id); button.disabled = false; }
+    }
+
     async function loadTasks() {
       hideMessage(taskMessage);
       refreshButton.disabled = true;
       try {
         const { data, error } = await client.from('keyword_tasks')
-          .select('id,asin,status,created_at,processing_ms,processing_run_id,report_url,failure_reason,upload_path,comparison_phase,comparison_request,comparison_asins:comparison_state->competitorAsins,core_keyword,comparison_pricing:comparison_state->pricing')
+          .select('id,asin,status,control_state,created_at,processing_ms,processing_run_id,report_url,failure_reason,upload_path,comparison_phase,comparison_request,comparison_asins:comparison_state->competitorAsins,core_keyword,comparison_pricing:comparison_state->pricing')
           .order('created_at', { ascending: false })
           .limit(config.taskLimit || 10);
         if (error) throw error;
@@ -145,7 +172,7 @@
               showMessage(submitMessage,'已创建独立竞对任务（04、05），正在整理候选。请在该任务中选择竞对并继续。','success');
               await loadTasks();
             }catch(error){showMessage(submitMessage,humanError(error));}finally{submitting=false;}
-          }, t => window.KeywordComparison.open(t, app, loadTasks))));
+          }, t => window.KeywordComparison.open(t, app, loadTasks), controlTask)));
         }
       } catch (error) {
         showMessage(taskMessage, humanError(error));

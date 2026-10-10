@@ -39,10 +39,11 @@
 
     <section class="panel" aria-labelledby="tasks-title">
       <div class="panel-title task-list-title"><div><p class="step-label">STEP 02</p><h2 id="tasks-title">我的最近任务</h2></div><button id="refresh-tasks" class="secondary-button" type="button">刷新任务</button></div>
+      <p class="muted">暂停后保留已保存的数据；重新启动会继续本任务。暂停生效前，已发出的请求仍可能计费。</p>
       <div id="tasks-message" class="message" role="status" hidden></div>
       <div class="table-scroll">
         <table class="task-table">
-          <thead><tr><th>提交时间</th><th>ASIN</th><th>状态</th><th title="累计实际处理时间，不含排队及等待确认">任务耗时</th><th>失败原因</th><th>报告／重新分析</th></tr></thead>
+          <thead><tr><th>提交时间</th><th>ASIN</th><th>状态</th><th title="累计实际处理时间，不含排队及等待确认">任务耗时</th><th>失败原因</th><th>报告／任务操作</th></tr></thead>
           <tbody id="tasks-body"><tr><td colspan="6" class="empty-cell">正在加载任务…</td></tr></tbody>
         </table>
       </div>
@@ -86,6 +87,6 @@
   <script src="../assets/config.js"></script>
   <script src="../assets/common.js"></script>
   <script src="../assets/comparison-ui.js?v=20261010-task-split"></script>
-  <script src="../assets/tool.js?v=20261010-task-split"></script>
+  <script src="../assets/tool.js?v=20261010-pause"></script>
 </body>
 </html>
