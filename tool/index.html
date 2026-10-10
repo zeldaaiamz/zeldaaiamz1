@@ -16,7 +16,7 @@
 
   <main class="page-shell">
     <section class="page-intro">
-      <div><p class="eyebrow">CREATE A BATTLE REPORT</p><h1>创建关键词任务</h1><p>输入美国站 ASIN，上传广告搜索词报表，提交后生成任务报告，广告诊断整合在报告「06」中，无需再次上传。</p></div>
+      <div><p class="eyebrow">CREATE A BATTLE REPORT</p><h1>创建关键词任务</h1><p>输入美国站 ASIN，上传广告搜索词报表，提交后生成 01 关键词总表、02 自然位标杆、03 否定词清单、06 广告诊断。竞对与图片对比请在任务完成后单独发起。</p></div>
       <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center"><div class="status-badge neutral"><i></i>工人每 30 秒检查新任务</div></div>
     </section>
 
@@ -24,20 +24,13 @@
       <div class="panel-title"><div><p class="step-label">STEP 01</p><h2 id="submit-title">提交资料</h2></div><p>.xlsx / .csv，最大 10 MB</p></div>
       <div id="submit-message" class="message" role="status" hidden></div>
       <form id="task-form" class="task-form" novalidate>
-        <div id="reuse-summary" class="analysis-rule-bar" hidden><div><strong>复用已有数据重新分析</strong><p id="reuse-description"></p><small>关键词分析复用原始留底，不重复调用西柚。勾选竞对对比时，Sorftime 与文本判断另行确认费用；旧报告保留。</small></div><button id="cancel-reuse" type="button" class="secondary-button">改为上传新报表</button></div>
+        <div id="reuse-summary" class="analysis-rule-bar" hidden><div><strong>复用已有数据重新分析</strong><p id="reuse-description"></p><small>复用原始留底生成 01、02、03、06，不重复调用西柚；旧报告保留。</small></div><button id="cancel-reuse" type="button" class="secondary-button">改为上传新报表</button></div>
         <div class="task-primary-fields">
           <label class="field file-field"><span>广告搜索词报表</span><input id="report-file" name="report" type="file" accept=".xlsx,.csv" required><small id="file-name">尚未选择文件</small></label>
         </div>
         <div class="comparison-inputs" id="product-rows">
           <label class="field asin-field product-row"><span>自己</span><input id="asin" name="asin" type="text" maxlength="10" autocapitalize="characters" spellcheck="false" placeholder="例如 B09V366BDY" required></label><small>美国站 US · 自己的 ASIN 为 10 位，以 B0 开头</small>
-          <label><input id="comparison-enabled" type="checkbox"> 同时生成竞对对比</label>
-          <div id="comparison-fields" hidden>
-            <div id="competitor-asins" aria-label="竞对 ASIN 列表"></div>
-            <button id="add-competitor" class="secondary-button" type="button">＋ 添加竞对</button>
-            <small>选定 3–5 家，每行一个 ASIN；不能重复或包含自己。</small>
-            <label class="field"><span>核心关键词（选填）</span><input id="core-keyword" type="text" maxlength="200" placeholder="留空使用总表周搜索量最高的词"><small>用于同类产品特征与图片诊断；同搜索量并列时沿用总表顺序。</small></label>
-            <p>取数前会显示费用供你确认。特征清单返回后，须由你逐条确认保留、剔除或机会缺口，再生成对比。</p>
-          </div>
+
         </div>
         <div class="analysis-rule-bar"><div><strong id="rule-state">使用默认判定标准</strong><p id="rule-preview">优先放量：订单 ≥ 2｜ABA 转化份额排名前 3｜ACOS &lt; 25%；控制成本：点击 &gt; 15 且零订单</p></div><button id="open-rule-settings" type="button" class="secondary-button">设置</button></div>
         <button id="task-submit" class="primary-button submit-task" type="submit">提交任务</button>
@@ -92,7 +85,7 @@
   <script src="../assets/vendor/supabase.js"></script>
   <script src="../assets/config.js"></script>
   <script src="../assets/common.js"></script>
-  <script src="../assets/comparison-ui.js?v=20261009-evidence"></script>
-  <script src="../assets/tool.js?v=20261009-evidence"></script>
+  <script src="../assets/comparison-ui.js?v=20261010-task-split"></script>
+  <script src="../assets/tool.js?v=20261010-task-split"></script>
 </body>
 </html>

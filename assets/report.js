@@ -49,13 +49,14 @@
       hideMessage(message);
       try {
         const { data: task, error } = await client.from('keyword_tasks')
-          .select('id,asin,status,created_at,upload_path,report_url,failure_reason')
+          .select('id,asin,status,created_at,upload_path,report_url,failure_reason,comparison_phase')
           .eq('id', taskId)
           .maybeSingle();
         if (error) throw error;
         if (!task) throw new Error('找不到这个任务，或它不属于当前账户');
         currentTask = task;
-        document.querySelector('#report-title').textContent = `${task.asin} · 关键词作战总表`;
+        frame.title = task.comparison_phase ? '竞对与图片对比报告' : '关键词与广告分析报告';
+        document.querySelector('#report-title').textContent = `${task.asin} · ${task.comparison_phase ? '竞对与图片对比' : '关键词与广告分析'}`;
         meta.textContent = `提交于 ${formatTime(task.created_at)} · 仅当前登录账户可查看`;
         status.className = `status-badge ${statusClass(task.status)}`;
         status.replaceChildren(document.createElement('i'), document.createTextNode(task.status));

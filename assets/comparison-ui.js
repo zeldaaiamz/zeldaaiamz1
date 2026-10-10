@@ -12,7 +12,7 @@
   function taskLabel(task) {
     if (task.status === '失败') return task.status;
     if (task.comparison_phase === 'awaiting_selection') {
-      const asins = task.comparison_request?.competitorAsins || task.comparison_state?.competitorAsins || [];
+      const asins = task.comparison_request?.competitorAsins || task.comparison_state?.competitorAsins || task.comparison_asins || [];
       if (asins.length < 3) return '待选择竞对';
       const pricing = task.comparison_state?.pricing || task.comparison_pricing;
       return pricing?.verified ? '名单已保存 · 待确认取数费用' : '名单已保存 · 取数暂未开放';
@@ -29,7 +29,7 @@
     if (className) node.className = className;
     return node;
   }
-  async function open(task, app, onDone, onSelect) {
+  async function open(task, app, onDone) {
     const dialog = document.getElementById('comparison-review');
     const body = document.getElementById('comparison-review-body');
     const message = document.getElementById('comparison-review-message');
@@ -66,18 +66,21 @@
             try {if(new URL(c.imageUrl).protocol==='https:'){const img=element('img');img.src=c.imageUrl;img.alt=`${c.asin} 主图`;img.referrerPolicy='no-referrer';img.onerror=()=>{img.replaceWith(element('small','主图未返回'));};label.append(img);}else label.append(element('small','主图未返回'));}catch{label.append(element('small','主图未返回'));}
             label.append(element('small',c.keywords.join('、')));grid.append(label);
           });
-          const button=element('button','将我选定的竞对填入发起表单','primary-button');button.type='button';
+          const keywordLabel=element('label','核心关键词','field'),keyword=element('input');
+          keyword.type='text';keyword.maxLength=200;keyword.value=state.coreKeyword || '';keyword.placeholder='用于竞对特征与图片对比';
+          keywordLabel.append(keyword);
+          const button=element('button','保存名单并查看费用','primary-button');button.type='button';
           button.onclick=async()=>{
             if(selected.size<3)return app.showMessage(message,'请先选择 3–5 家竞对。');
+            if(!keyword.value.trim())return app.showMessage(message,'请填写核心关键词。');
             button.disabled=true;
             try {
-              const {data:source,error}=await app.client.from('keyword_tasks').select('id,asin,status,created_at,upload_path,core_keyword').eq('id',state.sourceTaskId).single();
+              const {error}=await app.client.rpc('save_keyword_comparison_selection',{p_task_id:t.id,p_asins:[...selected],p_core_keyword:keyword.value.trim()});
               if(error)throw error;
-              if(!onSelect)throw new Error('发起表单不可用');
-              onSelect(source,[...selected],t.id);dialog.close();
+              dialog.close();await onDone();await open(t,app,onDone);
             }catch(e){app.showMessage(message,app.humanError(e));}finally{button.disabled=false;}
           };
-          body.append(grid,button);return;
+          body.append(grid,keywordLabel,button);return;
         }
         body.append(element('p', `名单已保存，无需重新选择或重复提交。已选竞对：${asins.join('、')}`));
         const candidates = new Map((state.candidates || []).map(c => [c.asin,c]));

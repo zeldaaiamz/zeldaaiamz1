@@ -9,7 +9,7 @@
     section.style.cssText = 'padding:28px;margin:20px;background:white;border:1px solid #d7e4db;border-radius:10px;color:#294438;font:14px/1.8 sans-serif';
     const title = report.createElement('h2'); title.textContent = '图片诊断尚未运行';
     const description = report.createElement('p'); description.textContent = '当前任务尚无已保存的真实图片诊断结果。请先完成 04 图片资料准备，再在对话内确认买家清单与调用费用。';
-    const status = report.createElement('p'); status.textContent = '未调用视觉模型；这里不展示模拟数据。顶部“已完成”仅表示原关键词任务完成。';
+    const status = report.createElement('p'); status.textContent = '未调用视觉模型；这里不展示模拟数据。04 竞对对比已完成；05 将按图片清单确认、费用确认与结果验收进度显示。';
     section.append(title, description, status); panel.replaceChildren(section);
     panel.dataset.imageModule = 'awaiting-real-data';
     menu.classList.remove('upcoming');
