@@ -8,10 +8,21 @@
     requireSession, setButtonBusy, statusClass, formatTime,
   } = app;
 
+  function formatProcessingTime(task) {
+    if (task.status !== '已完成') return '—';
+    if (task.processing_ms == null || task.processing_run_id || !Number.isSafeInteger(task.processing_ms) || task.processing_ms < 0) return '未记录';
+    if (task.processing_ms < 1000) return '不足1秒';
+    const seconds = Math.floor(task.processing_ms / 1000);
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor(seconds % 3600 / 60);
+    const remainder = seconds % 60;
+    return `${hours ? `${hours}小时` : ''}${hours || minutes ? `${minutes}分` : ''}${remainder}秒`;
+  }
+
   function taskRow(task, onReuse, onReview) {
     const row = document.createElement('tr');
     const phaseLabel = window.KeywordComparison.taskLabel(task);
-    const values = [formatTime(task.created_at), task.asin, phaseLabel, task.failure_reason || '—'];
+    const values = [formatTime(task.created_at), task.asin, phaseLabel, formatProcessingTime(task), task.failure_reason || '—'];
     values.forEach((value, index) => {
       const cell = document.createElement('td');
       if (index === 2) {
@@ -131,7 +142,7 @@
       refreshButton.disabled = true;
       try {
         const { data, error } = await client.from('keyword_tasks')
-          .select('id,asin,status,created_at,report_url,failure_reason,upload_path,comparison_phase,comparison_request,core_keyword,comparison_pricing:comparison_state->pricing')
+          .select('id,asin,status,created_at,processing_ms,processing_run_id,report_url,failure_reason,upload_path,comparison_phase,comparison_request,core_keyword,comparison_pricing:comparison_state->pricing')
           .order('created_at', { ascending: false })
           .limit(config.taskLimit || 10);
         if (error) throw error;
@@ -139,7 +150,7 @@
         if (!data?.length) {
           const empty = document.createElement('tr');
           const cell = document.createElement('td');
-          cell.colSpan = 5;
+          cell.colSpan = 6;
           cell.className = 'empty-cell';
           cell.textContent = '还没有任务，先提交第一份报表。';
           empty.append(cell);
