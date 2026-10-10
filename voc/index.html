@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>用户洞察 · 工作台</title><link rel="stylesheet" href="assets/voc.css"></head>
+<body>
+<aside class="sidebar"><a class="brand" href="../tool/"><span class="brand-icon">V</span>用户洞察工作台</a><nav><a class="nav-active" href="./">◎　用户洞察</a><a href="../tool/">←　返回工具台</a></nav><div class="account"><span class="avatar">V</span><span id="account-name">登录后使用</span></div></aside>
+<main class="main" id="workspace" hidden>
+<header class="intro">输入 ASIN，逐条阅读评论，<strong>结合语义分析</strong>，生成多维度产品洞察报告。</header>
+<form id="asin-form" class="search-bar"><span class="market">🇺🇸 美国站</span><div class="asin-entry"><div id="asin-tags"></div><input id="asin-input" aria-label="输入 ASIN" placeholder="输入 ASIN，按空格或回车添加…" autocomplete="off" spellcheck="false"></div><span id="asin-count">0/10</span><button class="dark" id="configure" type="submit">⌕ 分析</button></form>
+<p id="page-message" class="message" role="status" hidden></p>
+<div class="dimensions"><span>功能价值</span><span>产品使用对象</span><span>体验价值</span><span>场景</span><span>保障价值</span><span>人群</span><span>购买动机</span><span>未满足需求</span></div>
+<section class="feature-grid" aria-label="用户洞察用途">
+<article><span class="feature-icon orange">♧</span><h2>用户洞察</h2><p>从真实评论中提炼用户画像、购买动机与未满足需求，建立产品与用户的精准连接</p></article>
+<article><span class="feature-icon mint">▦</span><h2>产品定义</h2><p>基于高频痛点与功能诉求，为产品开发和选品决策提供数据支持</p></article>
+<article><span class="feature-icon yellow">▧</span><h2>视觉策划</h2><p>提取用户关注的使用场景与体验卖点，为主图和 A+ 页面策划提供方向</p></article>
+<article><span class="feature-icon cream">▱</span><h2>文案优化</h2><p>直接复用用户原话与高频词，让 Listing 标题、五点和 ST 更贴近搜索意图</p></article>
+</section>
+<section class="reports"><header class="section-heading"><h1>分析报告</h1><button id="refresh" class="outline">刷新</button></header><p class="stage-note">骨架验收阶段 · 任务空跑，不抓评论、不调用 AI · 状态每 2 秒更新</p><p id="tasks-error" class="message" role="alert" hidden></p><div id="task-list" class="task-grid" aria-live="polite"><p>正在加载任务…</p></div></section>
+</main>
+<p id="boot-error" class="boot-error" role="alert" hidden></p>
+<dialog id="configure-dialog" aria-labelledby="dialog-title">
+<form id="submit-form"><header class="modal-header"><div><h2 id="dialog-title">包含 <span id="product-count">0</span> 个商品</h2><p>选择本次需要分析的 ASIN</p></div><button type="button" id="close-dialog" class="close" aria-label="关闭">×</button></header>
+<div class="selection-bar"><label><input type="checkbox" id="select-all"> 选择当前页</label><button type="button" id="clear-selection" class="text-button">清空</button><strong id="selection-count"></strong></div><div id="products" class="product-grid"></div>
+<footer class="modal-footer"><fieldset><legend>每个 ASIN 分析下方指定条数 <small>建议 200 条</small></legend><div class="count-options"><label><input type="radio" name="review-count" value="100" required><span>100 条</span></label><label><input type="radio" name="review-count" value="200"><span>200 条 <em>推荐</em></span></label><label><input type="radio" name="review-count" value="300"><span>300 条</span></label><label><input type="radio" name="review-count" value="500"><span>500 条</span></label></div></fieldset>
+<fieldset><legend>评论来源</legend><div class="scope-options"><label><input type="radio" name="review-scope" value="include_variants" checked><span><strong>含变体评论 <em>默认</em></strong><small>包含同族变体评论</small></span></label><label><input type="radio" name="review-scope" value="asin_only"><span><strong>仅本 ASIN</strong><small>仅分析所选 ASIN 的评论</small></span></label></div></fieldset>
+<p id="submit-error" class="message" role="alert" hidden></p><div class="modal-actions"><button type="button" id="cancel-dialog" class="outline">取消</button><button type="submit" id="start-analysis" class="dark">ϟ 开始分析</button></div><p class="cost-note">本阶段为空跑，不调用付费接口</p></footer></form></dialog>
+<script src="../assets/vendor/supabase.js"></script><script src="../assets/config.js"></script><script src="assets/shared.js"></script><script src="assets/app.js"></script></body></html>
