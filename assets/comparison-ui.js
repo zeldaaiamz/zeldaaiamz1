@@ -63,7 +63,7 @@
             const label=element('label',undefined,'candidate-item'),check=element('input');check.type='checkbox';check.value=c.asin;
             check.onchange=()=>{if(check.checked&&selected.size>=5){check.checked=false;app.showMessage(message,'最多选择 5 家竞对。');return;}if(check.checked)selected.add(c.asin);else selected.delete(c.asin);};
             label.append(check,document.createTextNode(` ${c.asin} · ${c.count} 次`));
-            try {if(new URL(c.imageUrl).protocol==='https:'){const img=element('img');img.src=c.imageUrl;img.alt=`${c.asin} 主图`;img.referrerPolicy='no-referrer';img.onerror=()=>{img.replaceWith(element('small','主图未返回'));};label.append(img);}else label.append(element('small','主图未返回'));}catch{label.append(element('small','主图未返回'));}
+            try {if(new URL(c.imageUrl).protocol==='https:'){const img=element('img');img.src=c.imageUrl;img.alt=`${c.asin} 主图`;img.referrerPolicy='no-referrer';img.onerror=()=>{img.replaceWith(element('small','主图加载失败'));};label.append(img);}else label.append(element('small','已有留底暂无主图'));}catch{label.append(element('small','已有留底暂无主图'));}
             label.append(element('small',c.keywords.join('、')));grid.append(label);
           });
           const keywordLabel=element('label','核心关键词','field'),keyword=element('input');
