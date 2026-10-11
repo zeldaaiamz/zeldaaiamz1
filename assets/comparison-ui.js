@@ -15,7 +15,7 @@
       const asins = task.comparison_request?.competitorAsins || task.comparison_state?.competitorAsins || task.comparison_asins || [];
       if (asins.length < 3) return '待选择竞对';
       const pricing = task.comparison_state?.pricing || task.comparison_pricing;
-      return pricing?.verified ? '名单已保存 · 待确认取数费用' : '名单已保存 · 取数暂未开放';
+      return pricing?.verified ? '名单已保存 · 待确认取数费用' : '名单已保存 · 取数费用待核实';
     }
     return phaseLabels[task.comparison_phase] || task.status;
   }
@@ -88,7 +88,7 @@
         asins.forEach(asin => { const c=candidates.get(asin); list.append(element('li', `${asin}：${c ? `出现在 ${c.count} 个词的 ABA Top3：${c.keywords.join('、')}` : '未在当前关键词留底的 ABA Top3 中出现；保留你填写的名单'}`)); });
         body.append(list);
         const p=state.pricing;
-        if (!p?.verified || !p.unit || !p.reference || ![p.productDetail,p.categoryFeature].every(n=>Number.isFinite(n)&&n>=0)) { body.append(element('p','当前无法开始取数：服务端尚未启用取数或核实费用。名单已保留；待配置就绪并更新本任务报价后，再在此确认费用。重复提交不会解除此限制。')); return; }
+        if (!p?.verified || !p.unit || !p.reference || ![p.productDetail,p.categoryFeature].every(n=>Number.isFinite(n)&&n>=0)) { body.append(element('p','本任务尚无已核实的取数报价，暂不能确认费用。此状态不代表服务器取数开关关闭。名单已保留；更新本任务报价后可在此确认费用，无需重复提交。')); return; }
         const calls=asins.length+2,cost=(asins.length+1)*p.productDetail+p.categoryFeature;
         body.append(element('p',`${asins.length+1} 次产品资料 + 1 次同类产品特征，共 ${calls} 次调用，预计 ${cost} ${p.unit}。`));
         body.append(element('p',`费用依据：${p.reference}`));
