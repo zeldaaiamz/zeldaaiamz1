@@ -2,7 +2,7 @@
   'use strict';
   function request(ownAsin, text, keyword) {
     const asins = String(text || '').split(/\r?\n/).map(s => s.trim().toUpperCase()).filter(Boolean);
-    if (asins.length < 3 || asins.length > 5 || asins.some(a => !/^[A-Z0-9]{10}$/.test(a))) throw new Error('请填写 3–5 家竞对，一行一个有效 ASIN。');
+    if (asins.length < 1 || asins.some(a => !/^[A-Z0-9]{10}$/.test(a))) throw new Error('请填写至少 1 家竞对，一行一个有效 ASIN。');
     if (new Set([ownAsin, ...asins]).size !== asins.length + 1) throw new Error('竞对 ASIN 不能重复，也不能包含自己。');
     const coreKeyword = String(keyword || '').trim();
     if (coreKeyword.length > 200) throw new Error('核心关键词不能超过 200 字。');
@@ -13,7 +13,7 @@
     if (task.status === '失败') return task.status;
     if (task.comparison_phase === 'awaiting_selection') {
       const asins = task.comparison_request?.competitorAsins || task.comparison_state?.competitorAsins || task.comparison_asins || [];
-      if (asins.length < 3) return '待选择竞对';
+      if (asins.length < 1) return '待选择竞对';
       const pricing = task.comparison_state?.pricing || task.comparison_pricing;
       return pricing?.verified ? '名单已保存 · 待确认取数费用' : '名单已保存 · 取数费用待核实';
     }
@@ -55,13 +55,13 @@
       if (t.status !== '进行中') { body.append(element('p','任务状态已变化，请关闭后刷新。')); return; }
       if (t.comparison_phase === 'awaiting_selection') {
         const asins = t.comparison_request?.competitorAsins || state.competitorAsins || [];
-        if (asins.length < 3) {
+        if (asins.length < 1) {
           const candidates=(state.candidates || []).slice(0,10), selected=new Set();
-          body.append(element('p',`留底共 ${state.totalCandidates ?? candidates.length} 家候选，按出现次数展示前 ${candidates.length} 家。${candidates.length<8?'不足 8 家，未补造候选。':''}请选择 3–5 家，同次数按 ASIN 排列，不代表推荐。`));
+          body.append(element('p',`留底共 ${state.totalCandidates ?? candidates.length} 家候选，按出现次数展示前 ${candidates.length} 家。${candidates.length<8?'不足 8 家，未补造候选。':''}至少选择 1 家，勾选几家就对比几家。同次数按 ASIN 排列，不代表推荐。`));
           const grid=element('div',undefined,'candidate-grid');
           candidates.forEach(c=>{
             const label=element('label',undefined,'candidate-item'),check=element('input');check.type='checkbox';check.value=c.asin;
-            check.onchange=()=>{if(check.checked&&selected.size>=5){check.checked=false;app.showMessage(message,'最多选择 5 家竞对。');return;}if(check.checked)selected.add(c.asin);else selected.delete(c.asin);};
+            check.onchange=()=>{if(check.checked)selected.add(c.asin);else selected.delete(c.asin);};
             label.append(check,document.createTextNode(` ${c.asin} · ${c.count} 次`));
             try {if(new URL(c.imageUrl).protocol==='https:'){const img=element('img');img.src=c.imageUrl;img.alt=`${c.asin} 主图`;img.referrerPolicy='no-referrer';img.onerror=()=>{img.replaceWith(element('small','主图加载失败'));};label.append(img);}else label.append(element('small','已有留底暂无主图'));}catch{label.append(element('small','已有留底暂无主图'));}
             label.append(element('small',c.keywords.join('、')));grid.append(label);
@@ -71,7 +71,7 @@
           keywordLabel.append(keyword);
           const button=element('button','保存名单并查看费用','primary-button');button.type='button';
           button.onclick=async()=>{
-            if(selected.size<3)return app.showMessage(message,'请先选择 3–5 家竞对。');
+            if(selected.size<1)return app.showMessage(message,'请先选择至少 1 家竞对。');
             if(!keyword.value.trim())return app.showMessage(message,'请填写核心关键词。');
             button.disabled=true;
             try {
