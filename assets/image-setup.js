@@ -14,19 +14,19 @@
  function mount({app,taskId,frame,onUpdated}){
   const el=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n;};
   const dialog=el('dialog');dialog.id='image-setup-dialog';dialog.style.cssText='box-sizing:border-box;width:min(1100px,calc(100vw - 24px));max-height:90vh;font-family:system-ui,sans-serif;line-height:1.65;border:1px solid #ccdcd4;border-radius:16px;padding:24px;overflow:auto';
-  const style=el('style');style.textContent='#image-setup-dialog button{max-width:100%;white-space:normal;margin:8px 8px 8px 0}#image-setup-dialog fieldset{min-width:0;border:1px solid #d7e4db;border-radius:10px;margin:14px 0;padding:16px}#image-setup-dialog input,#image-setup-dialog textarea,#image-setup-dialog select{box-sizing:border-box;max-width:100%}#image-setup-dialog p{overflow-wrap:anywhere}#image-setup-dialog::backdrop{background:rgba(20,40,30,.4)}';dialog.append(style);
+  const style=el('style');style.textContent='#image-setup-dialog button{max-width:100%;white-space:normal;margin:8px 8px 8px 0}#image-setup-dialog fieldset{min-width:0;border:1px solid #d7e4db;border-radius:10px;margin:14px 0;padding:16px}#image-setup-dialog input,#image-setup-dialog textarea,#image-setup-dialog select{box-sizing:border-box;max-width:100%}#image-setup-dialog p{overflow-wrap:anywhere}#image-setup-dialog [aria-invalid=true]{border:2px solid #b42318;background:#fff5f4}#image-setup-dialog .checklist-error{display:block;color:#b42318;font-size:14px}#image-setup-dialog .checklist-feedback{color:#b42318;font-weight:600}#image-setup-dialog .checklist-error[hidden],#image-setup-dialog .checklist-feedback:empty{display:none}#image-setup-dialog::backdrop{background:rgba(20,40,30,.4)}';dialog.append(style);
   const close=el('button','关闭'),title=el('h2','04 · 图片诊断准备'),message=el('p'),body=el('div');message.setAttribute('role','status');close.onclick=()=>dialog.close();dialog.append(close,title,message,body);document.body.append(dialog);
-  let row=null,timer=null,submitting=false,lastRevision=null;
-  const notify=e=>{message.textContent=e.message||String(e);};
+  let row=null,timer=null,submitting=false,lastRevision=null,checklistFeedback=null;
+  const notify=e=>{message.textContent=e.message||String(e);if(checklistFeedback){checklistFeedback.textContent=message.textContent;checklistFeedback.scrollIntoView({block:'nearest'});}else message.scrollIntoView({block:'nearest'});};
   async function send(action,input={}){
-   if(submitting)return;submitting=true;body.querySelectorAll('button').forEach(b=>b.disabled=true);message.textContent='正在提交…';
+   if(submitting)return;submitting=true;body.querySelectorAll('button').forEach(b=>b.disabled=true);message.textContent='正在提交…';if(checklistFeedback)checklistFeedback.textContent='正在提交买家清单…';
    try{const r=await app.client.rpc('request_keyword_images',{p_task_id:taskId,p_revision:row?.revision??0,p_action:action,p_input:input});if(r.error)throw r.error;await load();}
    catch(e){notify(e);body.querySelectorAll('button').forEach(b=>b.disabled=false);}finally{submitting=false;}
   }
   function button(text,fn){const b=el('button',text);b.type='button';b.className='primary-button';b.onclick=fn;return b;}
   function resultButton(){return button('查看 05 诊断结果',()=>{dialog.close();frame.contentWindow.postMessage({type:'keyword-images-show-results'},'*');});}
   function render(){
-   body.replaceChildren();message.textContent=row?.error||'';
+   body.replaceChildren();checklistFeedback=null;message.textContent=row?.error||'';
    if(!row){body.append(button('读取本任务图片资料（不产生费用）',()=>send('prepare')));return;}
    if(['queued','running'].includes(row.status)){body.append(el('p',row.status==='queued'?'已提交，等待处理。':'正在处理，请勿重复提交。'));body.append(el('p','若长时间未完成，请保留当前任务并联系维护；系统不会自动重复付费调用。'));return;}
    const state=row.state?.workflow;
@@ -41,20 +41,36 @@
     body.append(el('h3','买家下单前需要确认的清单'),el('p','填写 5–7 条，供图片诊断逐项核对。可从已确认的适用特征中取用，也可以自行填写。'));
     const draft=row.command?.action==='confirm'?row.command.input:null;
     const kw=el('input');kw.value=draft?.coreKeyword||state.coreKeyword||'';kw.maxLength=200;kw.setAttribute('aria-label','核心关键词');body.append(kw);
-    const rows=el('div'),entries=[];body.append(rows);
-    function add(){if(entries.length>=7)return;const wrap=el('fieldset'),entry={wrap};
+    const rows=el('div'),entries=[],labels={name:'买家需要确认什么',english:'英文要素',source:'依据来源',purchaseReason:'影响购买的原因'};body.append(rows);
+    const feedback=el('p');feedback.className='checklist-feedback';feedback.setAttribute('role','alert');checklistFeedback=feedback;
+    let fieldId=0;
+    function fieldError(input){const error=el('small');error.id=`image-checklist-error-${++fieldId}`;error.className='checklist-error';error.hidden=true;input.setAttribute('aria-describedby',error.id);input.setAttribute('aria-required','true');input.oninput=()=>{input.removeAttribute('aria-invalid');error.hidden=true;error.textContent='';feedback.textContent='';};return error;}
+    const keywordError=fieldError(kw);kw.after(keywordError);
+    function clearError(input,error){input.removeAttribute('aria-invalid');error.hidden=true;error.textContent='';}
+    function mark(input,error,text){input.setAttribute('aria-invalid','true');error.textContent=text;error.hidden=false;}
+    function focusInvalid(input){input.scrollIntoView({block:'center'});input.focus({preventScroll:true});}
+
+    function add(){if(entries.length>=7)return;const wrap=el('fieldset'),entry={wrap,errors:{}};
      const feature=el('select');entry.feature=feature;feature.setAttribute('aria-label','引用适用特征');const blank=el('option','选择要引用的适用特征（可选）');blank.value='';feature.append(blank);
      (row.state.features||[]).forEach((f,i)=>{const o=el('option',f.product_feature);o.value=String(i);feature.append(o);});wrap.append(feature);
-     for(const [key,label] of [['name','买家需要确认什么'],['english','英文要素'],['source','依据来源'],['purchaseReason','影响购买的原因']]){const l=el('label',label),input=el('textarea');input.rows=2;input.maxLength=2000;input.setAttribute('aria-label',label);input.style.cssText='display:block;width:100%;margin:4px 0 12px';l.append(input);wrap.append(l);entry[key]=input;}
+     for(const [key,label] of [['name','买家需要确认什么'],['english','英文要素'],['source','依据来源'],['purchaseReason','影响购买的原因']]){const l=el('label',label),input=el('textarea');input.rows=2;input.maxLength=2000;input.setAttribute('aria-label',label);input.style.cssText='display:block;width:100%;margin:4px 0 12px';const error=fieldError(input);entry.errors[key]=error;l.append(input,error);wrap.append(l);entry[key]=input;}
      feature.onchange=()=>{if(feature.value==='')return;const f=row.state.features[Number(feature.value)];entry.english.value=f.product_feature;entry.source.value=`04 已确认适用特征：${f.product_feature}。${f.feature_description||''}`;};
-     wrap.append(button('删除本条',()=>{if(entries.length<=5){message.textContent='至少保留 5 条。';return;}entries.splice(entries.indexOf(entry),1);wrap.remove();}));entries.push(entry);rows.append(wrap);
+     wrap.append(button('删除本条',()=>{if(entries.length<=5){notify(Error('至少保留 5 条。'));return;}entries.splice(entries.indexOf(entry),1);wrap.remove();}));entries.push(entry);rows.append(wrap);
     }
     for(let i=0;i<(draft?.items?.length||5);i++)add();
     draft?.items?.forEach((item,i)=>{const entry=entries[i];if(!entry)return;for(const k of ['name','english','source','purchaseReason'])entry[k].value=item[k]||'';const index=(row.state.features||[]).findIndex(f=>item.sourceFeatures?.includes(f.product_feature));entry.feature.value=index<0?'':String(index);});body.append(button('增加一条（最多 7 条）',add));
+    body.append(feedback);
     body.append(button('确认买家清单并查看费用',()=>{
-     if(!kw.value.trim()||entries.some(e=>['name','english','source','purchaseReason'].some(k=>!e[k].value.trim()))){message.textContent='请填写核心关键词及每条清单的四项内容。';return;}
+     feedback.textContent='';message.textContent='';clearError(kw,keywordError);entries.forEach(e=>Object.keys(labels).forEach(k=>clearError(e[k],e.errors[k])));
+     const missing=[];
+     if(!kw.value.trim()){mark(kw,keywordError,'请填写核心关键词。');missing.push({input:kw,label:'核心关键词'});}
+     entries.forEach((e,i)=>Object.entries(labels).forEach(([k,label])=>{if(!e[k].value.trim()){mark(e[k],e.errors[k],`第 ${i+1} 条：请填写${label}。`);missing.push({input:e[k],label:`第 ${i+1} 条的“${label}”`});}}));
+     if(missing.length){feedback.textContent=`尚有 ${missing.length} 项未填写，已定位到${missing[0].label}。请补齐红框内容后再次确认。`;focusInvalid(missing[0].input);return;}
+
      const items=entries.map((e,i)=>({id:`item-${i+1}`,sourceFeatures:e.feature.value===''?[]:[row.state.features[Number(e.feature.value)].product_feature],...Object.fromEntries(['name','english','source','purchaseReason'].map(k=>[k,e[k].value.trim()]))}));
-     if(new Set(items.map(i=>i.name)).size!==items.length){message.textContent='清单事项不能重复。';return;}
+     const seen=new Map();
+     for(let i=0;i<items.length;i++){const previous=seen.get(items[i].name);if(previous!==undefined){const text=`第 ${i+1} 条与第 ${previous+1} 条的“买家需要确认什么”重复，请修改。`;mark(entries[i].name,entries[i].errors.name,text);feedback.textContent=text;focusInvalid(entries[i].name);return;}seen.set(items[i].name,i);}
+
      send('confirm',{sourceDigest:state.sourceDigest,coreKeyword:kw.value.trim(),items});
     }));return;
    }
