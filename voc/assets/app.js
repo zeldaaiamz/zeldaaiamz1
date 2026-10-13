@@ -2,6 +2,7 @@
   'use strict';
   const { client, session, el, message, reportPath } = window.VOC;
   const $ = id => document.getElementById(id);
+  let productCatalog = {};
   let asins = [], selected = new Set(), currentSession, busy = false, loading = false, pendingSubmission = null;
   function addInput() {
     const values = $('asin-input').value.toUpperCase().trim().split(/[\s,+]+/).filter(Boolean);
@@ -30,9 +31,36 @@
   }
   function closeDialog() { if (!busy) $('configure-dialog').close(); }
   const steps = ['排队中', '抓评论', '标注中', '生成报告', '完成'];
+  async function loadProductCatalog() {
+    try {
+      const response = await fetch(new URL('assets/product-catalog.json', window.VOC.vocRoot));
+      if (!response.ok) return;
+      const data = await response.json();
+      if (data && typeof data === 'object' && !Array.isArray(data)) productCatalog = data;
+    } catch { /* Missing catalog never blocks task status or reports. */ }
+  }
+  function taskThumbnail(asins) {
+    const values = [...new Set(asins.split('+'))];
+    const box = el('div', undefined, 'task-thumbnail');
+    if (values.length > 1) box.classList.add('multi');
+    for (const asin of values) {
+      const item = productCatalog[asin];
+      const slot = el('div', undefined, 'thumbnail-slot');
+      const valid = item && new RegExp('^products/' + asin + '\\.(jpg|webp)$').test(item.image);
+      if (valid) {
+        const image = el('img'); image.src = new URL('assets/' + item.image, window.VOC.vocRoot).href;
+        image.alt = asin + ' 商品主图'; image.title = item.title || asin;
+        image.loading = 'lazy'; image.decoding = 'async';
+        image.onerror = () => { image.hidden = true; if (!slot.querySelector('span')) slot.append(el('span', '图片暂缺', 'thumbnail-empty')); };
+        slot.append(image);
+      } else slot.append(el('span', '暂无图片', 'thumbnail-empty'));
+      box.append(slot);
+    }
+    return box;
+  }
   function taskCard(task) {
     const card = el('article', undefined, 'task-card'); card.dataset.taskId = task.id;
-    card.append(el('div', '▧', 'task-placeholder')); const body = el('div', undefined, 'task-body');
+    card.append(taskThumbnail(task.asins)); const body = el('div', undefined, 'task-body');
     const heading = el('div', undefined, 'task-heading'); heading.append(el('strong', task.asins));
     const kind = task.status === '完成' ? 'done' : task.status === '失败' ? 'failed' : task.status === '排队中' ? 'queued' : 'running';
     heading.append(el('span', task.status, `badge ${kind}`)); body.append(heading);
@@ -79,10 +107,10 @@
         const { data: existing, error: readError } = await client.from('voc_tasks').select('id').eq('id',pendingSubmission.id).maybeSingle();
         if (readError || !existing) throw error;
       }
-      pendingSubmission = null; $('configure-dialog').close(); message($('page-message'),'任务已提交，正在排队空跑。'); await loadTasks();
+      pendingSubmission = null; $('configure-dialog').close(); message($('page-message'),'任务已提交，正在排队。'); await loadTasks();
     } catch (e) { message($('submit-error'),`提交未确认：${e.message}。可重试，相同配置会复用任务号防止重复提交。`); }
     finally { busy = false; $('start-analysis').disabled = false; $('start-analysis').textContent = 'ϟ 开始分析'; }
   };
-  try { currentSession = await session(); if (!currentSession) return; $('workspace').hidden = false; $('account-name').textContent = currentSession.user.email || '已登录'; await loadTasks(); setInterval(loadTasks, 2000); }
+  try { currentSession = await session(); if (!currentSession) return; $('workspace').hidden = false; $('account-name').textContent = currentSession.user.email || '已登录'; await loadProductCatalog(); await loadTasks(); setInterval(loadTasks, 2000); }
   catch (e) { message($('boot-error'), `加载失败：${e.message}`); }
 }());
