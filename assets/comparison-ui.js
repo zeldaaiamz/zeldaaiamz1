@@ -14,8 +14,7 @@
     if (task.comparison_phase === 'awaiting_selection') {
       const asins = task.comparison_request?.competitorAsins || task.comparison_state?.competitorAsins || task.comparison_asins || [];
       if (asins.length < 1) return '待选择竞对';
-      const pricing = task.comparison_state?.pricing || task.comparison_pricing;
-      return pricing?.verified ? '名单已保存 · 待确认取数费用' : '名单已保存 · 取数费用待核实';
+      return '名单已保存 · 待开始比对';
     }
     return phaseLabels[task.comparison_phase] || task.status;
   }
@@ -38,7 +37,7 @@
     dialog.showModal();
     document.getElementById('close-comparison').onclick = () => dialog.close();
     try {
-      const { data:t, error } = await app.client.from('keyword_tasks').select('id,asin,status,comparison_phase,comparison_state,comparison_request').eq('id',task.id).single();
+      const { data:t, error } = await app.client.from('keyword_tasks').select('id,asin,status,control_state,comparison_phase,comparison_state,comparison_request').eq('id',task.id).single();
       if (error) throw error;
       const state = t.comparison_state || {};
       body.replaceChildren(element('p', `自己 ${t.asin} · 核心词：${state.coreKeyword || '未返回'}`));
@@ -54,6 +53,7 @@
       };
       if (t.status !== '进行中') { body.append(element('p','任务状态已变化，请关闭后刷新。')); return; }
       if (t.comparison_phase === 'awaiting_selection') {
+        if(t.control_state!=='running'){body.append(element('p','任务已暂停或正在暂停，请先在任务列表重新启动。'));return;}
         const asins = t.comparison_request?.competitorAsins || state.competitorAsins || [];
         if (asins.length < 1) {
           const candidates=(state.candidates || []).slice(0,10), selected=new Set();
@@ -69,35 +69,28 @@
           const keywordLabel=element('label','核心关键词','field'),keyword=element('input');
           keyword.type='text';keyword.maxLength=200;keyword.value=state.coreKeyword || '';keyword.placeholder='用于竞对特征与图片对比';
           keywordLabel.append(keyword);
-          const button=element('button','保存名单并查看费用','primary-button');button.type='button';
+          const button=element('button','开始比对','primary-button');button.type='button';
           button.onclick=async()=>{
             if(selected.size<1)return app.showMessage(message,'请先选择至少 1 家竞对。');
             if(!keyword.value.trim())return app.showMessage(message,'请填写核心关键词。');
             button.disabled=true;
             try {
-              const {error}=await app.client.rpc('save_keyword_comparison_selection',{p_task_id:t.id,p_asins:[...selected],p_core_keyword:keyword.value.trim()});
+              const {error}=await app.client.rpc('start_keyword_comparison',{p_task_id:t.id,p_asins:[...selected],p_core_keyword:keyword.value.trim()});
               if(error)throw error;
-              dialog.close();await onDone();await open(t,app,onDone);
+              dialog.close();await onDone();
             }catch(e){app.showMessage(message,app.humanError(e));}finally{button.disabled=false;}
           };
           body.append(grid,keywordLabel,button);return;
         }
-        body.append(element('p', `名单已保存，无需重新选择或重复提交。已选竞对：${asins.join('、')}`));
+        body.append(element('p', `已保存的竞对名单：${asins.join('、')}`));
         const candidates = new Map((state.candidates || []).map(c => [c.asin,c]));
         const list = element('ul');
         asins.forEach(asin => { const c=candidates.get(asin); list.append(element('li', `${asin}：${c ? `出现在 ${c.count} 个词的 ABA Top3：${c.keywords.join('、')}` : '未在当前关键词留底的 ABA Top3 中出现；保留你填写的名单'}`)); });
         body.append(list);
-        const p=state.pricing;
-        if (!p?.verified || !p.unit || !p.reference || ![p.productDetail,p.categoryFeature].every(n=>Number.isFinite(n)&&n>=0)) { body.append(element('p','本任务尚无已核实的取数报价，暂不能确认费用。此状态不代表服务器取数开关关闭。名单已保留；更新本任务报价后可在此确认费用，无需重复提交。')); return; }
-        const calls=asins.length+2,cost=(asins.length+1)*p.productDetail+p.categoryFeature;
-        body.append(element('p',`${asins.length+1} 次产品资料 + 1 次同类产品特征，共 ${calls} 次调用，预计 ${cost} ${p.unit}。`));
-        body.append(element('p',`费用依据：${p.reference}`));
-        const actions=element('div',undefined,'comparison-review-actions'),label=element('label'),check=element('input');check.type='checkbox';
-        label.append(check,document.createTextNode(' 我确认名单、核心词及上述取数费用。'));
-        const button=element('button','确认并开始取数','primary-button');button.type='button';button.disabled=true;
-        check.onchange=()=>{button.disabled=!check.checked;};
-        button.onclick=()=>submit(button,'confirm_keyword_competitors',{p_task_id:t.id,p_asins:asins,p_max_calls:calls,p_max_cost:cost,p_unit:p.unit});
-        actions.append(label,button);body.append(actions);
+        body.append(element('p','点击开始比对后，将按以上名单直接取数，无需单独确认报价。'));
+        const button=element('button','开始比对','primary-button');button.type='button';
+        button.onclick=()=>submit(button,'start_keyword_comparison',{p_task_id:t.id,p_asins:asins,p_core_keyword:state.coreKeyword || ''});
+        body.append(button);
       } else if (t.comparison_phase === 'awaiting_review') {
         body.append(element('p','剔除只适用于“不属于我们这种产品”的特征。适用但自己和竞对都未做的，请保留或标记“缺口”。AI 不会替你确认。'));
         body.append(element('p',`整理后共 ${(state.features || []).length} 条；按月销量占比降序，尚未清洗。前五条：${(state.features || []).slice(0,5).map(f=>`${f.product_feature}（产品 ${f.product_count_share}% / 月销 ${f.monthly_sales_share}%）`).join('；')}`));
