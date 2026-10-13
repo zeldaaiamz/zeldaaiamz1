@@ -8,7 +8,7 @@
     if (coreKeyword.length > 200) throw new Error('核心关键词不能超过 200 字。');
     return { competitorAsins: asins, coreKeyword };
   }
-  const phaseLabels = {keywords:'分析关键词中',prepare:'整理竞对名单中',awaiting_selection:'待选择／确认竞对',collect:'竞对取数中',awaiting_review:'待确认特征清洗',suggest:'生成清洗建议中',needs_evidence:'产品资料待补齐',judge:'逐条核对中',complete:'已完成'};
+  const phaseLabels = {keywords:'分析关键词中',prepare:'整理竞对名单中',awaiting_selection:'待选择／确认竞对',collect:'竞对取数中',awaiting_review:'待确认特征清洗',suggest:'生成清洗建议中',needs_evidence:'系统自动补齐资料',judge:'逐条核对中',complete:'已完成'};
   function taskLabel(task) {
     if (task.status === '失败') return task.status;
     if (task.comparison_phase === 'awaiting_selection') {
@@ -32,84 +32,17 @@
   const hasEvidence=v=>typeof v==='string'?Boolean(v.trim()):Array.isArray(v)?v.length>0&&v.every(hasEvidence):Boolean(v&&typeof v==='object'&&Object.values(v).some(hasEvidence));
   function evidenceEditor(t,body,app,message,onDone){
     const state=t.comparison_state||{},products=state.products||[];
-    body.append(element('p','资料不足，任务已停在这里，不会自动补齐。维护人员负责核对采集和字段读取；你也可以在下方补录对应 ASIN 的真实原文。'));
+    body.append(element('p','系统自动复用已采集资料，并获取对应 ASIN 的公开原文。你无需填写标题、描述、属性或资料来源；没有可靠原文的字段不会编造。'));
     body.append(element('p',`任务编号：${t.id}`));
-    if(state.notice)body.append(element('p',state.notice));
-    if(state.evidenceBlock==='category'||state.rawFeatureResponse||!products.length){
-      body.append(element('p','当前需要维护人员核对接口原始返回，补录产品资料无法解决。请提供上方任务编号，不要重复创建任务。'));
-      if(state.rawFeatureResponse){const details=element('details');details.append(element('summary','查看已保存的接口返回'),element('pre',JSON.stringify(state.rawFeatureResponse,null,2)));body.append(details);}
-      return;
+    if(state.notice)body.append(element('p',/补录|维护人员|填写/.test(state.notice)?'本任务已由后台自动处理原文缺失；成功资料直接复用，无需填写。':state.notice));
+    for(const p of products){
+      const section=element('fieldset',undefined,'evidence-product');section.append(element('legend',`${p.role==='own'?'我方':'竞对'} ${p.asin}`));
+      section.append(element('p',p.listingEvidenceComplete?'文字资料已齐全；可选字段未取得不阻止文字对比。':'系统正在处理缺失文字资料，无需手填。'));
+      const detail=element('details');detail.append(element('summary','查看系统已采集资料与来源'),element('pre',JSON.stringify({title:p.title,description:p.description,bullets:p.bullets,attributes:p.attributes,missingFields:p.missingFields,autoEvidence:p.autoEvidence,manualEvidence:p.manualEvidence},null,2)));section.append(detail);body.append(section);
     }
-    body.append(element('p','文字资料按本任务已确认的分析范围补齐。图片缺失不阻止模块 04 的文字对比，但模块 05 仍需图片完整；继续文字流程不代表图片诊断已经完成。'));
-    const editors=[];
-    for(const product of products){
-      const entry=state.manualEvidence?.[product.asin];
-      const required=product.evidenceMode==='title-description-attributes'?['title','description']:['title','bullets','attributes'];
-      const missing=Object.keys(evidenceLabels).filter(k=>!hasEvidence(product[k]));
-      const section=element('fieldset',undefined,'evidence-product');
-      section.append(element('legend',`${product.role==='own'?'我方':'竞对'} ${product.asin}`));
-      section.append(element('p',`文字必需：${required.map(k=>evidenceLabels[k]).join('、')}；缺失：${missing.map(k=>evidenceLabels[k]).join('、')||'无'}`));
-      const details=element('details');details.append(element('summary','查看已采集资料（保留原文）'),element('pre',JSON.stringify({title:product.title,description:product.description,bullets:product.bullets,attributes:product.attributes,photos:product.photos},null,2)));section.append(details);
-      const inputs={};
-      for(const key of missing){
-        const label=element('label',`${evidenceLabels[key]}${required.includes(key)?'（文字对比必需）':key==='photos'?'（图片诊断必需）':'（可选）'}`,'field');
-        const input=element('textarea');input.rows=key==='photos'?3:4;input.maxLength=30000;input.setAttribute('aria-label',`${product.asin} ${evidenceLabels[key]}`);
-        input.placeholder=key==='bullets'?'每行一条五点原文，不用描述代替':key==='attributes'?'每行一项，格式：属性名称：属性原文':key==='photos'?'每行一个 Amazon 图片 HTTPS 链接，按主图、附图顺序，最多 20 张':'粘贴对应字段原文，保留原始语言';
-        const value=entry?.fields?.[key];input.value=Array.isArray(value)?value.join('\n'):value&&typeof value==='object'?Object.entries(value).map(([k,v])=>`${k}：${v}`).join('\n'):value||'';
-        label.append(input);section.append(label);inputs[key]=input;
-      }
-      if(missing.length){
-        const label=element('label','资料来源（必填，例如 Listing 地址或卖家后台导出文件名）','field'),source=element('input');source.type='text';source.maxLength=1000;source.value=entry?.source||'';source.setAttribute('aria-label',`${product.asin} 资料来源`);label.append(source);section.append(label);editors.push({product,inputs,source,required});
-      }
-      body.append(section);
-    }
-    const actions=element('div',undefined,'comparison-review-actions'),confirm=element('input');confirm.type='checkbox';
-    const label=element('label');label.append(confirm,document.createTextNode(' 我确认补录原文及图片属于上述 ASIN，没有改写或混用其他产品资料。'));actions.append(label);
-    const selection=t.comparison_selection,unbounded=['user-unbounded','selection-start'].includes(selection?.costApproval)&&Number.isInteger(selection.maxCalls)&&selection.maxCalls>0,finiteQuote=unbounded||selection&&Number.isFinite(selection.maxCost)&&selection.maxCost>=0&&Number.isInteger(selection.maxCalls)&&selection.maxCalls>0&&selection.unit;
-    actions.append(element('p',unbounded?`原任务已授权按所选名单取数；原计划最多 ${selection.maxCalls} 次取数，具体费用本页未返回。继续仅处理原名单中尚未完成的取数，成功留底不重复使用额度。`:finiteQuote?`继续后仍受原取数总上限约束：${selection.maxCalls} 次、${selection.maxCost} ${selection.unit}（这是原任务总上限，不是新增费用）。已成功留底不重复采集；结果不明的请求会停止，不自动重试。`:'当前没有可展示的有限取数费用上限。可以先保存资料；请维护人员核实报价后再恢复，不能从此处直接继续。'));
-    const consent=element('input');consent.type='checkbox';consent.disabled=!finiteQuote;
-    const consentLabel=element('label');consentLabel.append(consent,document.createTextNode(unbounded?' 同意沿用原任务取数授权，继续原名单尚未完成的取数；不批准新的 AI 判断。':' 同意按上述原批准上限继续尚未完成的取数；不批准新的 AI 判断。'));actions.append(consentLabel);
-    const save=element('button','保存资料（不取数）','secondary-button'),resume=element('button','保存并继续文字对比','primary-button');save.type=resume.type='button';resume.disabled=!finiteQuote||t.control_state!=='running';
-    if(t.control_state!=='running')actions.append(element('p','任务处于暂停或正在暂停状态。可以保存资料；请先在任务列表重新启动，再回到这里继续。'));
-    const run=async continuing=>{
-      app.hideMessage(message);
-      try{
-        if(!confirm.checked)throw Error('请先确认资料与 ASIN 一致。');
-        if(continuing&&!consent.checked)throw Error('请先确认继续取数的费用范围。');
-        const entries=editors.map(({product,inputs,source,required})=>{
-          const fields={};
-          for(const [key,input] of Object.entries(inputs)){
-            const value=input.value.trim();if(!value)continue;
-            if(key==='photos'||key==='bullets')fields[key]=value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
-            else if(key==='attributes'){
-              fields[key]=Object.create(null);
-              for(const line of value.split(/\r?\n/).filter(s=>s.trim())){const m=line.match(/^([^:：]+)[:：](.+)$/);if(!m||!m[1].trim()||!m[2].trim()||Object.hasOwn(fields[key],m[1].trim()))throw Error('属性请逐行填写“名称：原文”，名称不能重复。');fields[key][m[1].trim()]=m[2].trim();}
-            }else fields[key]=value;
-          }
-          if(fields.photos){
-            if(fields.photos.length>20||new Set(fields.photos).size!==fields.photos.length)throw Error('图片链接最多 20 张，不能重复。');
-            for(const value of fields.photos){let u;try{u=new URL(value);}catch{throw Error('图片链接格式无效。');}if(u.protocol!=='https:'||u.username||u.password||u.port||!['m.media-amazon.com','images-na.ssl-images-amazon.com','images-eu.ssl-images-amazon.com','images-fe.ssl-images-amazon.com'].includes(u.hostname))throw Error('请使用 Amazon 图片 HTTPS 链接。');}
-          }
-          if(continuing&&required.some(k=>!hasEvidence(fields[k]??product[k])))throw Error(`${product.asin} 的文字必需资料尚未补齐。`);
-          if(!Object.keys(fields).length)return null;
-          if(!source.value.trim())throw Error(`${product.asin} 请填写资料来源。`);
-          if(!root.KeywordProductIdentity)throw Error('资料身份校验未加载，请刷新后重试。');
-          root.KeywordProductIdentity.assertSource(product.asin,source.value.trim());
-          return {asin:product.asin,source:source.value.trim(),fields};
-        }).filter(Boolean);
-        if(!root.KeywordProductIdentity)throw Error('资料身份校验未加载，请刷新后重试。');
-        root.KeywordProductIdentity.assertProducts(products.map(p=>{const patch={...state.manualEvidence?.[p.asin]?.fields,...entries.find(e=>e.asin===p.asin)?.fields};const photos=patch.photos?.map((url,i)=>({asin:p.asin,index:i+1,url}))||p.photos;return {...p,photos,imageUrl:patch.photos?.[0]||p.imageUrl};}));
-        if(!entries.length&&!continuing)throw Error('请至少填写一项缺失资料。');
-        save.disabled=resume.disabled=true;
-        const response=await app.client.rpc('save_keyword_comparison_evidence',{p_task_id:t.id,p_revision:state.evidenceRevision||0,p_entries:entries,p_continue:continuing});
-        if(response.error)throw response.error;
-        await onDone();
-        if(continuing){document.getElementById('comparison-review').close();}
-        else{document.getElementById('comparison-review').close();await open(t,app,onDone);app.showMessage(message,'资料已保存，未触发取数。补齐文字资料后，可确认费用范围并继续。','success');}
-      }catch(error){app.showMessage(message,app.humanError(error));}
-      finally{save.disabled=false;resume.disabled=!finiteQuote||t.control_state!=='running';}
-    };
-    save.onclick=()=>run(false);resume.onclick=()=>run(true);actions.append(save,resume);body.append(actions);
+    body.append(element('p','自动补齐优先使用免费公开原文；成功留底不重复取数。继续仍受原任务已批准名单与取数次数约束，不批准新的 AI 判断。图片资料不足时由图片流程单独处理。'));
+    if(state.evidenceBlock==='category'||state.rawFeatureResponse||state.autoEvidenceAttempted){body.append(element('p','自动采集或接口解析暂未取得完整资料，系统已保留记录等待处理；不需要你填写资料，也不会无限重试。'));return;}
+    body.append(element('p','后台将自动接续本任务并获取缺失原文；关闭窗口即可，无需填写或重复提交。'));
   }
   async function open(task, app, onDone) {
     const dialog = document.getElementById('comparison-review');
@@ -135,7 +68,7 @@
         finally { button.disabled = false; }
       };
       if (t.status !== '进行中') { body.append(element('p','任务状态已变化，请关闭后刷新。')); return; }
-      document.getElementById('comparison-review-title').textContent=t.comparison_phase==='needs_evidence'?'补齐产品资料':'竞对对比 · 待确认';
+      document.getElementById('comparison-review-title').textContent=t.comparison_phase==='needs_evidence'?'系统自动补齐产品资料':'竞对对比 · 待确认';
       if(t.comparison_phase==='needs_evidence'){evidenceEditor(t,body,app,message,onDone);return;}
       if (t.comparison_phase === 'awaiting_selection') {
         if(t.control_state!=='running'){body.append(element('p','任务已暂停或正在暂停，请先在任务列表重新启动。'));return;}
