@@ -93,8 +93,12 @@
           if(continuing&&required.some(k=>!hasEvidence(fields[k]??product[k])))throw Error(`${product.asin} 的文字必需资料尚未补齐。`);
           if(!Object.keys(fields).length)return null;
           if(!source.value.trim())throw Error(`${product.asin} 请填写资料来源。`);
+          if(!root.KeywordProductIdentity)throw Error('资料身份校验未加载，请刷新后重试。');
+          root.KeywordProductIdentity.assertSource(product.asin,source.value.trim());
           return {asin:product.asin,source:source.value.trim(),fields};
         }).filter(Boolean);
+        if(!root.KeywordProductIdentity)throw Error('资料身份校验未加载，请刷新后重试。');
+        root.KeywordProductIdentity.assertProducts(products.map(p=>{const patch={...state.manualEvidence?.[p.asin]?.fields,...entries.find(e=>e.asin===p.asin)?.fields};const photos=patch.photos?.map((url,i)=>({asin:p.asin,index:i+1,url}))||p.photos;return {...p,photos,imageUrl:patch.photos?.[0]||p.imageUrl};}));
         if(!entries.length&&!continuing)throw Error('请至少填写一项缺失资料。');
         save.disabled=resume.disabled=true;
         const response=await app.client.rpc('save_keyword_comparison_evidence',{p_task_id:t.id,p_revision:state.evidenceRevision||0,p_entries:entries,p_continue:continuing});

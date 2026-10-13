@@ -31,6 +31,7 @@
    if(['queued','running'].includes(row.status)){body.append(el('p',row.status==='queued'?'已提交，等待处理。':'正在处理，请勿重复提交。'));body.append(el('p','若长时间未完成，请保留当前任务并联系维护；系统不会自动重复付费调用。'));return;}
    const state=row.state?.workflow;
    if(!state){body.append(button('重新读取图片资料',()=>send('prepare')));return;}
+   try{if(!root.KeywordProductIdentity)throw Error('图片归属校验未加载，请刷新页面。');root.KeywordProductIdentity.assertProducts(state.products||[]);}catch(e){body.append(el('p',e.message),el('p','图片归属存在冲突，请先修正来源资料，再刷新。当前不能确认清单或启动诊断。'),button('刷新图片资料',()=>send('prepare')));return;}
    const gallery=el('div');gallery.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px';
    state.products.forEach(p=>{const card=el('section');card.append(el('h3',`${p.role==='own'?'我方':'竞对'} ${p.asin} · ${p.photos.length} 张`),el('p',p.title));p.photos.forEach(photo=>{const a=el('a'),img=el('img');a.href=photo.url;a.target='_blank';a.rel='noopener noreferrer';img.src=photo.url;img.alt=photo.label;img.referrerPolicy='no-referrer';img.style.cssText='width:90px;height:90px;object-fit:contain';img.onerror=()=>{img.replaceWith(el('span',`${photo.label} 加载失败`));};a.append(img);card.append(a);});gallery.append(card);});body.append(gallery);
    if(state.missing.length){body.append(el('p',`缺少图片：${state.missing.join('、')}。请联系维护人员补齐这些 ASIN 的图片资料后刷新，暂不能启动诊断。`));}
