@@ -8,6 +8,9 @@
   async function start() {
     const session = await requireSession();
     if (!session) return;
+    const profileName=document.querySelector('#workspace-user-name'),profileEmail=document.querySelector('#workspace-user-email');
+    if(profileName)profileName.textContent=session.user?.user_metadata?.name||'当前账户';
+    if(profileEmail&&session.user?.email){const [name,domain]=session.user.email.split('@');profileEmail.textContent=`${name.slice(0,3)}…@${domain||''}`;}
     const taskId = new URLSearchParams(window.location.search).get('task');
     const message = document.querySelector('#report-message');
     const loading = document.querySelector('#report-loading');
@@ -17,6 +20,7 @@
     const meta = document.querySelector('#report-meta');
     let currentTask = null;
     let imageSetup = null;
+    let imageWorkspace = null;
 
     window.addEventListener('message', async (event) => {
       if (event.source !== frame.contentWindow) return;
@@ -91,6 +95,9 @@
         if(task.comparison_phase && window.KeywordImageSetup){
           reportHtml=window.KeywordImageSetup.upgrade(reportHtml);
           if(!imageSetup) imageSetup=window.KeywordImageSetup.mount({app,taskId,frame,onUpdated:async()=>{reportLoaded=false;await loadReport();}});
+        }
+        if(window.KeywordImageWorkspace && !imageWorkspace){
+          imageWorkspace=window.KeywordImageWorkspace.mount({app,taskId,frame});
         }
         frame.srcdoc = reportHtml;
         if (unavailable.length) showMessage(message, `报告已加载，但${unavailable.join('、')}模块资源暂时不可用，请刷新页面重试。`);
