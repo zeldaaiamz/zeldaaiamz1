@@ -38,7 +38,7 @@
    if(row.status==='error'){body.append(button('刷新资料与当前进度',()=>send('prepare')));return;}
    body.append(button('刷新图片资料与阶段',()=>send('prepare')));
    if(state.status==='awaiting_checklist'){
-    body.append(el('h3','买家下单前需要确认的清单'),el('p','填写 5–7 条，供图片诊断逐项核对。可从已确认的适用特征中取用，也可以自行填写。'));
+    body.append(el('h3','买家下单前需要确认的清单'),el('p','按需增删清单条目，供图片诊断逐项核对。可从已确认的适用特征中取用，也可以自行填写。'));
     const draft=row.command?.action==='confirm'?row.command.input:null;
     const kw=el('input');kw.value=draft?.coreKeyword||state.coreKeyword||'';kw.maxLength=200;kw.setAttribute('aria-label','核心关键词');body.append(kw);
     const rows=el('div'),entries=[],labels={name:'买家需要确认什么',english:'英文要素',source:'依据来源',purchaseReason:'影响购买的原因'};body.append(rows);
@@ -50,15 +50,15 @@
     function mark(input,error,text){input.setAttribute('aria-invalid','true');error.textContent=text;error.hidden=false;}
     function focusInvalid(input){input.scrollIntoView({block:'center'});input.focus({preventScroll:true});}
 
-    function add(){if(entries.length>=7)return;const wrap=el('fieldset'),entry={wrap,errors:{}};
+    function add(){const wrap=el('fieldset'),entry={wrap,errors:{}};
      const feature=el('select');entry.feature=feature;feature.setAttribute('aria-label','引用适用特征');const blank=el('option','选择要引用的适用特征（可选）');blank.value='';feature.append(blank);
      (row.state.features||[]).forEach((f,i)=>{const o=el('option',f.product_feature);o.value=String(i);feature.append(o);});wrap.append(feature);
      for(const [key,label] of [['name','买家需要确认什么'],['english','英文要素'],['source','依据来源'],['purchaseReason','影响购买的原因']]){const l=el('label',label),input=el('textarea');input.rows=2;input.maxLength=2000;input.setAttribute('aria-label',label);input.style.cssText='display:block;width:100%;margin:4px 0 12px';const error=fieldError(input);entry.errors[key]=error;l.append(input,error);wrap.append(l);entry[key]=input;}
      feature.onchange=()=>{if(feature.value==='')return;const f=row.state.features[Number(feature.value)];entry.english.value=f.product_feature;entry.source.value=`04 已确认适用特征：${f.product_feature}。${f.feature_description||''}`;};
-     wrap.append(button('删除本条',()=>{if(entries.length<=5){notify(Error('至少保留 5 条。'));return;}entries.splice(entries.indexOf(entry),1);wrap.remove();}));entries.push(entry);rows.append(wrap);
+     wrap.append(button('删除本条',()=>{entries.splice(entries.indexOf(entry),1);wrap.remove();}));entries.push(entry);rows.append(wrap);
     }
-    for(let i=0;i<(draft?.items?.length||5);i++)add();
-    draft?.items?.forEach((item,i)=>{const entry=entries[i];if(!entry)return;for(const k of ['name','english','source','purchaseReason'])entry[k].value=item[k]||'';const index=(row.state.features||[]).findIndex(f=>item.sourceFeatures?.includes(f.product_feature));entry.feature.value=index<0?'':String(index);});body.append(button('增加一条（最多 7 条）',add));
+    for(let i=0;i<(draft?.items?.length??1);i++)add();
+    draft?.items?.forEach((item,i)=>{const entry=entries[i];if(!entry)return;for(const k of ['name','english','source','purchaseReason'])entry[k].value=item[k]||'';const index=(row.state.features||[]).findIndex(f=>item.sourceFeatures?.includes(f.product_feature));entry.feature.value=index<0?'':String(index);});body.append(button('增加一条',add));
     body.append(feedback);
     body.append(button('确认买家清单并查看费用',()=>{
      feedback.textContent='';message.textContent='';clearError(kw,keywordError);entries.forEach(e=>Object.keys(labels).forEach(k=>clearError(e[k],e.errors[k])));
