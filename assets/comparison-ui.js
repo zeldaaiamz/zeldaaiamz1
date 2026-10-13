@@ -197,14 +197,11 @@
           const ratio=element('td',`${share(f.product_count_share,f.product_count_share_display)} / ${share(f.monthly_sales_share,f.monthly_sales_share_display)}`);
           const decisionCell=element('td'),select=element('select');
           [['','请选择'],['保留','保留'],['剔除','剔除：不属本类型'],['缺口','缺口：适用但未做']].forEach(([value,title])=>{const option=element('option',title);option.value=value;select.append(option);});
-          const exclusion=element('label'),check=element('input');check.type='checkbox';exclusion.hidden=true;
-          exclusion.append(check,document.createTextNode(' 确认不属于本产品类型'));
-          select.onchange=()=>{exclusion.hidden=select.value!=='剔除';check.checked=false;};
-          decisionCell.append(select,exclusion);
+          decisionCell.append(select);
           const reasonCell=element('td'),reason=element('textarea');reason.rows=2;reason.setAttribute('aria-label',`${f.product_feature}判定理由`);reasonCell.append(reason);
           const proposal=state.cleaningSuggestions?.find(p=>p.product_feature===f.product_feature);
-          if(proposal){select.value=proposal.decision;reason.value=proposal.reason;exclusion.hidden=select.value!=='剔除';}
-          row.append(name,ratio,decisionCell,reasonCell);table.append(row);return {f,select,reason,check};
+          if(proposal){select.value=proposal.decision;reason.value=proposal.reason;}
+          row.append(name,ratio,decisionCell,reasonCell);table.append(row);return {f,select,reason};
         });
         scroll.append(table);body.append(scroll);
         const actions=element('div',undefined,'comparison-review-actions'),approval=element('label'),approve=element('input');approve.type='checkbox';
@@ -212,7 +209,7 @@
         const button=element('button','确认清单并生成对比','primary-button');button.type='button';
         button.onclick=()=>{
           app.hideMessage(message);
-          if (!inputs.length || inputs.some(x=>!x.select.value||!x.reason.value.trim()||(x.select.value==='剔除'&&!x.check.checked))) return app.showMessage(message,'请逐条填写判定、理由；剔除项必须确认不属于本产品类型。');
+          if (!inputs.length || inputs.some(x=>!x.select.value||!x.reason.value.trim())) return app.showMessage(message,'请逐条填写判定和理由。');
           if (!inputs.some(x=>x.select.value!=='剔除')) return app.showMessage(message,'至少保留一项适用特征。');
           if (!approve.checked || !Number.isFinite(state.aiQuote?.maxCny)) return app.showMessage(message,'请确认清洗结果和文本核对费用。');
           const decisions=inputs.map(x=>({product_feature:x.f.product_feature,decision:x.select.value,reason:x.reason.value.trim(),...(x.select.value==='剔除'?{exclusionBasis:'不属于本产品类型'}:{})}));
