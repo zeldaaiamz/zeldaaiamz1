@@ -2,7 +2,7 @@
   'use strict';
   const { client, session, el, message, reportPath } = window.VOC;
   const $ = id => document.getElementById(id);
-  let productCatalog = {};
+  let productCatalog = {}, tasks = [], lastTaskRender = "", loadedLimit = 50, hasMore = false;
   let asins = [], selected = new Set(), currentSession, busy = false, loading = false, pendingSubmission = null;
   function addInput() {
     const values = $('asin-input').value.toUpperCase().trim().split(/[\s,+]+/).filter(Boolean);
@@ -16,11 +16,11 @@
     $('asin-tags').replaceChildren(...asins.map(asin => { const chip = el('span', undefined, 'asin-chip'); chip.append(el('span', asin)); const remove = el('button', '×'); remove.type = 'button'; remove.setAttribute('aria-label', `删除 ${asin}`); remove.onclick = () => { asins = asins.filter(a => a !== asin); renderTags(); }; chip.append(remove); return chip; }));
     $('asin-count').textContent = `${asins.length}/10`;
   }
-  function updateSelection() { $('selection-count').textContent = `${selected.size}/${asins.length} 已选择`; $('select-all').checked = selected.size === asins.length; $('select-all').indeterminate = selected.size > 0 && selected.size < asins.length; }
+  function updateSelection() { $('selection-count').textContent = `${selected.size}/${asins.length} 已选择`; $('select-all').checked = selected.size === asins.length; $('select-all').indeterminate = selected.size > 0 && selected.size < asins.length; updateSummary(); }
   function renderProducts() {
     $('products').replaceChildren(...asins.map(asin => {
       const card = el('label', undefined, 'product-card'); const check = el('input'); check.type = 'checkbox'; check.value = asin; check.checked = selected.has(asin); check.onchange = () => { check.checked ? selected.add(asin) : selected.delete(asin); updateSelection(); };
-      card.append(check, el('span', '▧', 'product-placeholder'), el('strong', asin), el('small', '美国站 · 商品信息待抓取')); return card;
+      card.append(check, taskThumbnail(asin), el('strong', asin), el('small', productCatalog[asin]?.title || '美国站 · 商品名称尚未核实'));  return card;
     })); updateSelection();
   }
   function openDialog() {
@@ -58,31 +58,83 @@
     }
     return box;
   }
-  function taskCard(task) {
-    const card = el('article', undefined, 'task-card'); card.dataset.taskId = task.id;
-    card.append(taskThumbnail(task.asins)); const body = el('div', undefined, 'task-body');
-    const heading = el('div', undefined, 'task-heading'); heading.append(el('strong', task.asins));
-    const kind = task.status === '完成' ? 'done' : task.status === '失败' ? 'failed' : task.status === '排队中' ? 'queued' : 'running';
-    heading.append(el('span', task.status, `badge ${kind}`)); body.append(heading);
-    body.append(el('p', `站点：US · ${task.review_scope === 'asin_only' ? '仅本 ASIN' : '含变体评论'}`));
-    body.append(el('p', `每个 ASIN 目标：${task.reviews_per_asin} 条`));
-    body.append(el('p', `已标注：${task.annotated_count} 条`));
-    body.append(el('time', new Intl.DateTimeFormat('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }).format(new Date(task.created_at))));
-    if (task.status === '失败') body.append(el('p', task.failure_reason || '任务失败，请联系管理员', 'failure'));
-    else if (task.status === '完成') {
-      if (reportPath(task)) { const link = el('a', '点击查看报告 →', 'report-link'); link.href = `report/?task=${encodeURIComponent(task.id)}`; body.append(link); }
-      else body.append(el('p', '空跑完成，暂无报告', 'empty-report'));
-    } else { const progress = el('progress'); progress.max = 4; progress.value = Math.max(0, steps.indexOf(task.status)); progress.setAttribute('aria-label', '任务阶段进度'); body.append(progress); }
-    card.append(body); return card;
+  function normalized(value) { return value.split('+').sort().join('+'); }
+  function duplicateTask(count, scope) {
+    const value = [...selected].sort().join('+');
+    return tasks.find(t => !['完成','失败'].includes(t.status) && normalized(t.asins) === value && t.reviews_per_asin === count && t.review_scope === scope);
   }
-  async function loadTasks() {
-    if (loading || document.hidden) return; loading = true;
+  function updateSummary() {
+    const form = new FormData($('submit-form')), count = Number(form.get('review-count')), scope = form.get('review-scope');
+    $('submission-summary').textContent = `${selected.size} 个 ASIN · ${scope === 'asin_only' ? '仅本 ASIN' : '含变体评论'} · ${count ? '总目标 '+selected.size*count+' 条' : '请选择采集目标'} · 费用尚未报价`;
+    const duplicate = duplicateTask(count,scope); $('duplicate-warning').replaceChildren();
+    if (duplicate) { const link = el('button','查看已有任务'); link.type='button'; link.onclick=()=>showDetail(duplicate); $('duplicate-warning').append(el('p','已有相同配置的未结束任务；提交将返回该任务，不重复创建。'),link); }
+  }
+  function statusOf(task) {
+    if(task.status==='完成') return reportPath(task) ? '报告已生成' : '结束但无报告';
+    if(task.status==='失败') return /评论库未收录/.test(task.failure_reason||'')?'未取得评论':'处理失败';
+    if(task.control_state==='paused') return '已请求暂停';
+    if(task.waiting_reason) return '等待处理';
+    if(task.status==='排队中') return '尚未开始';
+    return task.execution_phase || task.status;
+  }
+  function waitingText(task) {
+    if(task.control_state==='paused') return '已请求暂停：正在进行的调用可能需完成后停止，留底保留；继续仍受原授权约束。';
+    if(task.waiting_reason) return task.waiting_reason;
+    if(task.status==='排队中') return '尚未开始。等待原因未同步，请查看详情；不要重复提交。';
+    if(task.status==='完成'&&!reportPath(task)) return '没有可打开的报告；历史记录未提供结束原因，不能判断是否未取得评论。';
+    if(task.status==='失败') return task.failure_reason || '失败原因未返回';
+    if(task.heartbeat_at && Date.now()-Date.parse(task.heartbeat_at)>120000) return '执行状态超过 2 分钟未更新，请核对执行服务；不能据此判断已失败。';
+    return '';
+  }
+  function date(value) { return value ? new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(value)) : '未返回'; }
+  async function manage(task,action,name) {
+    try { const {error}=await client.rpc('voc_manage_task',{p_id:task.id,p_action:action,p_name:name??null}); if(error)throw error; $('task-dialog').close(); message($('page-message'),({pause:'已请求暂停；正在进行的调用完成后停止后续调用。',resume:'已请求继续；复用留底，仍受原费用授权限制。',archive:'已归档，可从已归档列表恢复；归档不会暂停执行。',restore:'已恢复到任务列表。',rename:'任务名称已保存。',recover:'已请求按原授权核对留底并恢复；结果未知的调用不会自动重扣。'})[action]||'操作已保存。'); await loadTasks(); }
+    catch(e){message($('page-message'),'操作未确认：'+e.message+'。请刷新核对状态后再操作。');}
+  }
+  function actions(task) {
+    const box=el('div',undefined,'task-actions');
+    const add=(text,fn)=>{const b=el('button',text);b.type='button';b.onclick=fn;box.append(b)};
+    add('任务详情',()=>showDetail(task));
+    if(!['完成','失败'].includes(task.status)) add(task.control_state==='paused'?'继续任务':'暂停任务',()=>manage(task,task.control_state==='paused'?'resume':'pause'));
+    if(task.status==='失败'&&['采集','标注','归集','生成旅程','生成报告'].includes(task.execution_phase)&&!/评论库未收录/.test(task.failure_reason||''))add('复用留底恢复',()=>manage(task,'recover'));
+    add(task.archived?'恢复到列表':'归档',()=>manage(task,task.archived?'restore':'archive'));
+    return box;
+  }
+  function showDetail(task) {
+    const host=$('task-detail');host.replaceChildren();
+    for(const text of [task.task_name||task.asins,'任务编号：'+task.id,'状态：'+statusOf(task),waitingText(task),'创建：'+date(task.created_at),'记录更新：'+date(task.updated_at),'执行心跳：'+date(task.heartbeat_at),'站点：US；评论范围：'+(task.review_scope==='asin_only'?'仅本 ASIN':'含变体评论'),'采集目标：'+task.reviews_per_asin+' 条 / ASIN；实际采集：'+(task.collected_count??'未返回')+'；已标注：'+task.annotated_count,'费用：本页面没有报价或扣费账单；执行仍需逐任务授权。','恢复说明：复用已有评论和标注留底；调用结果未知时需人工核对，失败任务不会自动重新执行；有明确失败阶段的任务可请求按原授权复用留底恢复。','归档只整理列表，不暂停执行；如需停止后续调用，请先暂停。']) if(text)host.append(el('p',text));
+    for(const item of task.sample_summary?.perAsin||[])host.append(el('p',`${item.requestedAsin}：${item.count} 条；采集结束原因：${item.stopReason||'未返回'}`));
+    const name=el('input');name.value=task.task_name||'';name.maxLength=80;name.setAttribute('aria-label','编辑任务名称');const save=el('button','保存名称');save.type='button';save.onclick=()=>manage(task,'rename',name.value);host.append(name,save,actions(task));
+    if(!$('task-dialog').open)$('task-dialog').showModal();
+  }
+  function taskCard(task) {
+    const card=el('article',undefined,'task-card');card.dataset.taskId=task.id;card.append(taskThumbnail(task.asins));
+    const body=el('div',undefined,'task-body'),heading=el('div',undefined,'task-heading');heading.append(el('strong',task.task_name||task.asins));
+    const kind=task.status==='完成'&&reportPath(task)?'done':task.status==='失败'||task.status==='完成'?'failed':task.status==='排队中'||task.waiting_reason?'queued':'running';heading.append(el('span',statusOf(task),`badge ${kind}`));body.append(heading);
+    if(task.task_name)body.append(el('p',task.asins));
+    body.append(el('p','编号：'+task.id.slice(0,8)),el('p',`US · ${task.review_scope==='asin_only'?'仅本 ASIN':'含变体评论'} · 每个 ASIN 目标 ${task.reviews_per_asin} 条`),el('p',`实际采集：${task.collected_count??'未返回'} · 已标注：${task.annotated_count} 条`),el('p','创建：'+date(task.created_at)+' · 更新：'+date(task.updated_at)));
+    const note=waitingText(task);if(note)body.append(el('p',note,'task-status-note'));
+    if(reportPath(task)&&task.status==='完成'){const link=el('a','打开报告 →','report-link');link.href=`report/?task=${encodeURIComponent(task.id)}`;body.append(link)}
+    else if(!note&&task.status!=='失败'){const progress=el('progress');progress.max=4;progress.value=Math.max(0,steps.indexOf(task.status));progress.setAttribute('aria-label','执行阶段；不是完成百分比');body.append(progress)}
+    if(task.collected_count!==null&&task.collected_count!==undefined&&task.collected_count<task.reviews_per_asin*task.asins.split('+').length)body.append(el('p','实际样本未达目标，原因见任务详情。'));
+    body.append(actions(task));card.append(body);return card;
+  }
+  function renderTasks() {
+    const active=document.activeElement, focusTask=active?.closest('[data-task-id]')?.dataset.taskId, focusLabel=active?.textContent;
+    const q=$('task-search').value.trim().toUpperCase(),filter=$('task-filter').value;
+    const list=tasks.filter(t=>(filter==='archived'?t.archived:!t.archived)&&(!q||[t.asins,t.task_name||'',t.id].join(' ').toUpperCase().includes(q))&&(filter==='all'||filter==='archived'||filter==='waiting'&&(t.waiting_reason||t.control_state==='paused'||t.status==='排队中')||filter==='done'&&t.status==='完成'&&reportPath(t)||filter==='failed'&&(t.status==='失败'||t.status==='完成'&&!reportPath(t))||filter==='running'&&!t.waiting_reason&&t.control_state!=='paused'&&['抓评论','标注中','生成报告'].includes(t.status)));
+    $('task-total').textContent=`当前显示 ${list.length} 条；已加载 ${tasks.length} 条任务`;
+    $('task-list').replaceChildren(...(list.length?list.map(taskCard):[el('p',tasks.length?'没有匹配的任务，请调整搜索或筛选。':'还没有分析任务，输入 ASIN 开始。','empty-state')]));
+    const more=el('button','加载更早任务','outline');more.type='button';more.onclick=()=>{loadedLimit+=50;loadTasks()};if(hasMore)$('task-list').append(more);
+    if(focusTask){const card=[...$('task-list').children].find(c=>c.dataset.taskId===focusTask);const button=card&&[...card.querySelectorAll('button,a')].find(b=>b.textContent===focusLabel);button?.focus({preventScroll:true})}
+  }
+  async function loadTasks(append=false) {
+    if(loading||document.hidden)return;loading=true;
     try {
-      const { data, error } = await client.from('voc_tasks').select('id,asins,marketplace,reviews_per_asin,review_scope,status,annotated_count,failure_reason,report_path,created_at').order('created_at', { ascending: false }).limit(50);
-      if (error) throw error;
-      $('task-list').replaceChildren(...(data.length ? data.map(taskCard) : [el('p','还没有分析任务，输入 ASIN 开始。','empty-state')])); message($('tasks-error'), '');
-    } catch (e) { message($('tasks-error'), `任务列表读取失败：${e.message}`); }
-    finally { loading = false; }
+      const {data,error}=await client.from('voc_tasks').select('*').order('created_at',{ascending:false}).range(0,loadedLimit-1);if(error)throw error;
+      const next=data;hasMore=data.length===loadedLimit;
+      const signature=JSON.stringify(next);tasks=next;if(signature!==lastTaskRender){lastTaskRender=signature;renderTasks();if($('configure-dialog').open)updateSummary()}message($('tasks-error'),'');
+    }catch(e){message($('tasks-error'),'任务列表读取失败，保留上次结果：'+e.message)}finally{loading=false}
   }
   $('asin-input').addEventListener('keydown', event => { if ((event.key === 'Enter' || event.key === ' ') && !event.isComposing) { event.preventDefault(); addInput(); } });
   $('asin-form').onsubmit = event => { event.preventDefault(); openDialog(); };
@@ -90,27 +142,27 @@
   $('configure-dialog').addEventListener('cancel', event => { if (busy) event.preventDefault(); });
   $('select-all').onchange = () => { selected = $('select-all').checked ? new Set(asins) : new Set(); renderProducts(); };
   $('clear-selection').onclick = () => { selected.clear(); renderProducts(); };
-  $('refresh').onclick = loadTasks;
+  $('refresh').onclick = () => loadTasks(); $('task-search').oninput=renderTasks; $('task-filter').onchange=renderTasks; $('close-task').onclick=()=>$('task-dialog').close(); $('submit-form').addEventListener('change',updateSummary);
   $('submit-form').onsubmit = async event => {
     event.preventDefault(); if (busy) return;
     if (!selected.size) return message($('submit-error'), '请至少选择一个商品。');
     const count = Number(new FormData(event.target).get('review-count'));
     if (![100,200,300,500].includes(count)) return message($('submit-error'), '请选择每个 ASIN 的目标评论条数。');
-    const payload = { user_id: currentSession.user.id, asins: asins.filter(a => selected.has(a)).join('+'), marketplace: 'US', reviews_per_asin: count, review_scope: new FormData(event.target).get('review-scope') };
+    const payload = { user_id: currentSession.user.id, asins: asins.filter(a => selected.has(a)).sort().join('+'), marketplace: 'US', reviews_per_asin: count, review_scope: new FormData(event.target).get('review-scope') };
     const signature = JSON.stringify(payload);
     if (!pendingSubmission || pendingSubmission.signature !== signature) pendingSubmission = { id: crypto.randomUUID(), signature };
     busy = true; $('start-analysis').disabled = true; $('start-analysis').textContent = '正在提交…'; message($('submit-error'),'');
     try {
-      const { error } = await client.from('voc_tasks').insert({ id: pendingSubmission.id, ...payload });
+      const requestedId=pendingSubmission.id; const {data: submitted,error}=await client.rpc('voc_submit_task',{p_id:requestedId,p_asins:payload.asins,p_count:count,p_scope:payload.review_scope,p_name:$('task-name').value});
       if (error) {
         // An uncertain response may have committed. Read this exact UUID before offering retry.
         const { data: existing, error: readError } = await client.from('voc_tasks').select('id').eq('id',pendingSubmission.id).maybeSingle();
         if (readError || !existing) throw error;
       }
-      pendingSubmission = null; $('configure-dialog').close(); message($('page-message'),'任务已提交，正在排队。'); await loadTasks();
+      pendingSubmission = null; $('configure-dialog').close(); message($('page-message'),submitted&&submitted.id!==requestedId?'已有相同任务，已复用该任务。':'任务已创建，等待费用授权；尚未开始执行。'); await loadTasks();
     } catch (e) { message($('submit-error'),`提交未确认：${e.message}。可重试，相同配置会复用任务号防止重复提交。`); }
-    finally { busy = false; $('start-analysis').disabled = false; $('start-analysis').textContent = 'ϟ 开始分析'; }
+    finally { busy = false; $('start-analysis').disabled = false; $('start-analysis').textContent = '提交并等待授权'; }
   };
-  try { currentSession = await session(); if (!currentSession) return; $('workspace').hidden = false; $('account-name').textContent = currentSession.user.email || '已登录'; await loadProductCatalog(); await loadTasks(); setInterval(loadTasks, 2000); }
+  try { currentSession = await session(); if (!currentSession) return; $('workspace').hidden = false; $('account-name').textContent = currentSession.user.email || '已登录'; await loadProductCatalog(); await loadTasks(); setInterval(()=>loadTasks(), 2000); }
   catch (e) { message($('boot-error'), `加载失败：${e.message}`); }
 }());

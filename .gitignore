@@ -9,3 +9,9 @@
 
 # 本地设计验收可能含私有任务留底，不发布
 /preview/
+
+# Keep private credentials out of every release
+.env*
+*.pem
+*.key
+密钥库.md

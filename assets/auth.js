@@ -4,6 +4,20 @@
   const app = window.KeywordBattle;
   if (!app) return;
   const { client, route, showMessage, hideMessage, humanError, getSession, safeReturnTo, setButtonBusy } = app;
+  const vocEntry = /\/voc(?:\/|$)/.test(new URLSearchParams(location.search).get('returnTo') || '');
+  if (vocEntry) {
+    document.title = '登录 · 用户洞察 VOC';
+    document.querySelector('#brand-title').textContent = '用户洞察 VOC';
+    document.querySelector('.brand-mark').textContent = 'V';
+    document.querySelector('.brand-panel .eyebrow').textContent = 'VOICE OF CUSTOMER';
+    document.querySelector('.brand-copy').textContent = '从真实评论中提炼用户需求，核对证据并生成产品洞察报告。';
+    const features = ['确认商品与评论范围', '查看任务进度与等待原因', '阅读洞察并核对原始评论'];
+    document.querySelectorAll('.feature-list li').forEach((item, i) => {
+      const number = document.createElement('span');
+      number.textContent = '0' + (i + 1);
+      item.replaceChildren(number, document.createTextNode(features[i]));
+    });
+  }
   const recoveryRequested = new URLSearchParams(window.location.hash.slice(1)).get('type') === 'recovery'
     || new URLSearchParams(window.location.search).get('type') === 'recovery';
 
@@ -30,7 +44,7 @@
       tabs.hidden = recovering;
       emailGroup.hidden = recovering;
       emailInput.required = !recovering;
-      title.textContent = recovering ? '设置新密码' : registering ? '创建账户' : '登录你的工作台';
+      title.textContent = recovering ? '设置新密码' : registering ? '创建账户' : vocEntry ? '登录用户洞察 VOC' : '登录你的工作台';
       description.textContent = recovering
         ? '输入两次新密码，保存后即可继续使用。'
         : registering ? '注册后请按邮件提示完成邮箱确认。' : '使用邮箱和密码继续。';

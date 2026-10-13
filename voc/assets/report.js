@@ -8,12 +8,12 @@
     try {
       const id = new URLSearchParams(location.search).get('task');
       if (!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id || '')) throw new Error('任务号无效，请返回任务列表。');
-      const { data: task, error } = await client.from('voc_tasks').select('id,asins,status,report_path,failure_reason').eq('id',id).maybeSingle();
+      const { data: task, error } = await client.from('voc_tasks').select('id,asins,status,report_path,failure_reason,waiting_reason,control_state').eq('id',id).maybeSingle();
       if (error) throw error; if (!task) throw new Error('找不到任务，或当前账户无权查看。');
       document.getElementById('report-title').textContent = task.asins;
       if (task.status === '失败') throw new Error(task.failure_reason || '任务失败');
-      if (task.status !== '完成') return message(status,`任务${task.status}，报告尚未生成。`);
-      if (!task.report_path) return message(status,'空跑完成，暂无报告。报告将在模块 3 接入。');
+      if (task.status !== '完成') return message(status,`报告尚未生成。${task.control_state==='paused'?'任务已请求暂停。':task.waiting_reason||'当前阶段：'+task.status} 请返回任务列表查看详情。`);
+      if (!task.report_path) return message(status,'该任务已结束但没有可打开的报告，历史记录未提供原因。请返回任务列表查看详情。');
       if (!reportPath(task)) throw new Error('报告文件路径不符合 VOC 规则。');
       const { data, error: downloadError } = await client.storage.from(config.reportBucket).download(task.report_path);
       if (downloadError) throw downloadError;
