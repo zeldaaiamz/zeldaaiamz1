@@ -5,7 +5,7 @@
   if(!panel||doc.querySelector('#image-setup-entry'))return html;
   const section=doc.createElement('section');section.id='image-setup-entry';section.style.cssText='margin:20px;padding:24px;background:#fff;border:1px solid #cbded5;border-radius:12px';
   const title=doc.createElement('h3');title.textContent='图片诊断准备';
-  const note=doc.createElement('p');note.textContent='查看图片资料 → AI 起草中文买家问题 → 确认或修改 → 查看图片诊断费用。诊断结果与图片证据显示在 05。';
+  const note=doc.createElement('p');note.textContent='查看图片资料 → AI 起草中文买家问题 → 确认或修改并提交 → 自动完成图片分析。诊断结果与图片证据显示在 05，无需再次确认费用或逐家验收。';
   const button=doc.createElement('button');button.type='button';button.textContent='打开图片资料与确认清单';button.id='open-image-setup';button.style.cssText='padding:12px 20px;background:#18745d;color:white;border:0;border-radius:8px;cursor:pointer';
   section.append(title,note,button);panel.prepend(section);
   const script=doc.createElement('script');script.textContent=`document.getElementById('open-image-setup').addEventListener('click',()=>parent.postMessage({type:'keyword-images-open'},'*'));window.addEventListener('message',e=>{if(e.source===parent&&e.data?.type==='keyword-images-show-results')document.querySelector('[data-module="05"]')?.click();});`;doc.body.append(script);
@@ -58,7 +58,7 @@
      entry.problem=problem;label.append(input,error);wrap.append(label,status,confirm,modify,remove);entries.push(entry);rows.append(wrap);
     }
     suggestion.items.forEach(add);
-    body.append(button('增加一条',()=>add()),feedback,button('保存已确认清单并查看图片诊断费用',()=>{
+    body.append(button('增加一条',()=>add()),feedback,button('提交已确认清单并自动分析图片',()=>{
      feedback.textContent='';message.textContent='';
      const unconfirmed=entries.find(e=>!e.confirmed);
      if(unconfirmed){feedback.textContent='请先逐条确认买家问题；需要调整可点击“修改”。';unconfirmed.problem('这一条尚未确认。');return;}
@@ -67,16 +67,9 @@
     }));return;
    }
    const details=el('details'),summary=el('summary','已确认的买家清单');details.append(summary);state.checklist?.items.forEach(i=>details.append(el('p',i.name)));body.append(details);
-   if(['awaiting_own_approval','awaiting_competitor_approval'].includes(state.status)){
-    const q=row.state.quote;
-    if(q){body.append(el('h3',q.stage==='own'?'我方图片诊断费用':`竞对 ${q.competitorAsin} 图片对比费用`),el('p',`本次 ${q.imageCount} 张图片，最多 ${q.maxCalls} 次调用，费用上限 ¥${q.maxCny}。模型：${q.model}。`),el('p',`报价依据：${q.pricingReference}；核实时间：${q.verifiedAt}`));const run=button('确认上述费用并开始本阶段诊断',()=>send('run',{quoteDigest:q.quoteDigest}));run.disabled=state.missing.length>0;body.append(run);}
-    else body.append(el('p',`暂不能确认费用：${row.state.quoteError||'报价尚未准备完成'}。请维护人员核实视觉模型及当前报价后再刷新。`));
-    body.append(button('刷新本阶段报价',()=>send('quote')));
-   }else if(['awaiting_own_review','awaiting_competitor_review'].includes(state.status)){
-    body.append(el('p','本阶段诊断已生成。请到 05 查看结果后，返回此处验收；验收不会自动启动下一次付费调用。'),resultButton());
-    const seen=el('input');seen.type='checkbox';const label=el('label',' 我已查看 05 本阶段图片证据与结果');label.prepend(seen);body.append(label);
-    const accept=button('验收本阶段结果',()=>send('accept'));accept.disabled=true;seen.onchange=()=>accept.disabled=!seen.checked;body.append(accept);
-   }else if(state.status==='complete')body.append(el('p','图片诊断及逐家验收全部完成。'),resultButton());
+   if(['awaiting_own_approval','awaiting_competitor_approval','awaiting_own_review','awaiting_competitor_review'].includes(state.status)){
+    body.append(el('p','清单已提交，图片分析将自动完成，无需确认费用或逐家验收。'),button('继续自动图片分析',()=>send('prepare')),resultButton());
+   }else if(state.status==='complete')body.append(el('p','图片分析已全部完成。'),resultButton());
   }
   async function load(){
    clearTimeout(timer);
