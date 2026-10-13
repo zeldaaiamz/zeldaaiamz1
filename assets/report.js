@@ -82,7 +82,7 @@
         const originalHtml = await data.text();
         let reportHtml = originalHtml;
         const unavailable = [];
-        for (const [name, module] of [['图片', window.KeywordBattleImageModule], ['广告', window.KeywordBattleAdModule]]) {
+        for (const [name, module] of [['自然位标杆', window.KeywordBattleOrganicModule], ['图片', window.KeywordBattleImageModule], ['广告', window.KeywordBattleAdModule]]) {
           try {
             if (!module) throw new Error('模块加载器不可用');
             reportHtml = await module.upgrade(reportHtml);
