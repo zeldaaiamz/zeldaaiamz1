@@ -16,6 +16,7 @@
     const status = document.querySelector('#report-status');
     const meta = document.querySelector('#report-meta');
     let currentTask = null;
+    let imageSetup = null;
 
     window.addEventListener('message', async (event) => {
       if (event.source !== frame.contentWindow) return;
@@ -86,6 +87,10 @@
             if (!module) throw new Error('模块加载器不可用');
             reportHtml = await module.upgrade(reportHtml);
           } catch { unavailable.push(name); }
+        }
+        if(task.comparison_phase && window.KeywordImageSetup){
+          reportHtml=window.KeywordImageSetup.upgrade(reportHtml);
+          if(!imageSetup) imageSetup=window.KeywordImageSetup.mount({app,taskId,frame,onUpdated:async()=>{reportLoaded=false;await loadReport();}});
         }
         frame.srcdoc = reportHtml;
         if (unavailable.length) showMessage(message, `报告已加载，但${unavailable.join('、')}模块资源暂时不可用，请刷新页面重试。`);
