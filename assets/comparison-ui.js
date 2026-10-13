@@ -8,7 +8,7 @@
     if (coreKeyword.length > 200) throw new Error('核心关键词不能超过 200 字。');
     return { competitorAsins: asins, coreKeyword };
   }
-  const phaseLabels = {keywords:'分析关键词中',prepare:'整理竞对名单中',awaiting_selection:'待选择／确认竞对',collect:'竞对取数中',awaiting_review:'待确认特征清洗',suggest:'生成清洗建议中',needs_evidence:'系统自动补齐资料',judge:'逐条核对中',complete:'已完成'};
+  const phaseLabels = {keywords:'分析关键词中',prepare:'整理竞对名单中',awaiting_selection:'待选择／确认竞对',collect:'竞对取数中',awaiting_review:'待确认特征清洗',suggest:'生成清洗建议中',needs_evidence:'系统自动补齐资料',judge:'生成业务档案与特征清单中',complete:'已完成'};
   function taskLabel(task) {
     if (task.status === '失败') return task.status;
     if (task.comparison_phase === 'awaiting_selection') {
@@ -142,15 +142,15 @@
         });
         scroll.append(table);body.append(scroll);
         const actions=element('div',undefined,'comparison-review-actions'),approval=element('label'),approve=element('input');approve.type='checkbox';
-        approval.append(approve,document.createTextNode(` 我已逐项审核，确认清洗结果，并批准文本核对费用上限 ¥${state.aiQuote?.maxCny ?? '未返回'}（最多 ${state.aiQuote?.maxCalls ?? '未返回'} 次）。`));
-        const button=element('button','确认清单并生成对比','primary-button');button.type='button';
+        approval.append(approve,document.createTextNode(' 我已逐项审核并确认特征清洗结果。'));
+        const button=element('button','确认特征并生成档案','primary-button');button.type='button';
         button.onclick=()=>{
           app.hideMessage(message);
           if (!inputs.length || inputs.some(x=>!x.select.value||!x.reason.value.trim())) return app.showMessage(message,'请逐条填写判定和理由。');
           if (!inputs.some(x=>x.select.value!=='剔除')) return app.showMessage(message,'至少保留一项适用特征。');
-          if (!approve.checked || !Number.isFinite(state.aiQuote?.maxCny)) return app.showMessage(message,'请确认清洗结果和文本核对费用。');
+          if (!approve.checked) return app.showMessage(message,'请确认清洗结果。');
           const decisions=inputs.map(x=>({product_feature:x.f.product_feature,decision:x.select.value,reason:x.reason.value.trim(),...(x.select.value==='剔除'?{exclusionBasis:'不属于本产品类型'}:{})}));
-          return submit(button,'confirm_keyword_features',{p_task_id:t.id,p_source_digest:state.sourceDigest,p_decisions:decisions,p_ai_max_cny:state.aiQuote.maxCny});
+          return submit(button,'confirm_keyword_features_without_text',{p_task_id:t.id,p_source_digest:state.sourceDigest,p_decisions:decisions});
         };
         actions.append(approval,button);body.append(actions);
       } else { body.append(element('p',state.notice || '当前阶段无需确认，请稍后刷新任务。')); if(state.rawFeatureResponse){const details=element('details'),summary=element('summary','查看接口原始返回（已留底）');details.append(summary,element('pre',JSON.stringify(state.rawFeatureResponse,null,2)));body.append(details);} }
