@@ -23,11 +23,11 @@
     if (activeStages.includes(task.status) && task.heartbeat_at && now - Date.parse(task.heartbeat_at) > 120000) return '执行状态超过 2 分钟未更新，请核对执行服务；不能据此判断已失败。';
     return '';
   }
-  function feeText(task, budget, money) {
+  function feeText(task, budget, money, includeDaily = true) {
     if (!budget) return '费用数据尚未返回';
     const owner = task.duplicate_of || task.id;
     const cost = money(budget.taskCosts?.[owner] ?? 0);
-    return (task.duplicate_of ? '本记录新增费用 ¥0；主任务核算费用（含预占，仅计一次）：' : '本任务核算费用（含预占）：') + cost + ' / ¥5；今日合计 ' + money(budget.dayUsed) + ' / ¥50';
+    return (task.duplicate_of ? '本记录新增费用 ¥0；主任务核算费用（含预占，仅计一次）：' : '本任务核算费用（含预占）：') + cost + ' / ¥5' + (includeDaily ? '；今日合计 ' + money(budget.dayUsed) + ' / ¥50' : '');
   }
   function shortTitle(title, fallback) {
     const text = typeof title === 'string' ? title.trim() : '';

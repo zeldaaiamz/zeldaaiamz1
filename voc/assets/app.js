@@ -126,14 +126,21 @@
     body.append(el('p',task.asins));
     body.append(el('p','编号：'+task.id.slice(0,8)),el('p',`US · ${task.review_scope==='asin_only'?'仅本 ASIN':'含变体评论'} · 每个 ASIN 目标 ${task.reviews_per_asin} 条`),el('p',(task.duplicate_of?'主任务样本：':'')+`实际采集：${sampleTask.collected_count??'未返回'} · 已标注：${sampleTask.annotated_count} 条`),el('p','创建：'+date(task.created_at)+' · 更新：'+date(task.updated_at)));
     if(task.duplicate_of&&main)body.append(el('p','主任务状态：'+statusOf(main)));
-    body.append(el('p',taskView.feeText(task,budgetSummary,money)));
+    body.append(el('p',taskView.feeText(task,budgetSummary,money,false),'task-fee'));
     const note=waitingText(task);if(note)body.append(el('p',note,'task-status-note'));
     const report=reportLink(task);if(report)body.append(report);
     else if(!note&&task.status!=='失败'){const progress=el('progress');progress.max=4;progress.value=Math.max(0,steps.indexOf(task.status));progress.setAttribute('aria-label','执行阶段；不是完成百分比');body.append(progress)}
     if(sampleTask.collected_count!==null&&sampleTask.collected_count!==undefined&&sampleTask.collected_count<task.reviews_per_asin*task.asins.split('+').length)body.append(el('p','实际样本未达目标，原因见任务详情。'));
     body.append(actions(task));card.append(body);return card;
   }
+  function renderBudget() {
+    const b=budgetSummary, metric=(title,value)=>{const item=el('div');item.append(el('span',title),el('strong',Number.isFinite(value)?money(value):'未返回'));return item;};
+    $('budget-metrics').replaceChildren(metric('已结算核算',b?.dayActual),metric('未结算预占',b?.dayReserved),metric('今日剩余额度',b && Number.isFinite(b.dayLimit)&&Number.isFinite(b.dayUsed)?Math.max(0,b.dayLimit-b.dayUsed):null),metric('每日上限',b?.dayLimit));
+    $('budget-day').textContent=b?.chargeDay ? b.chargeDay+' · 北京时间' : '北京时间';
+    $('budget-note').textContent=!b?'费用数据未返回，请刷新核对。':`每任务上限 ${Number.isFinite(b.taskLimit)?money(b.taskLimit):'未返回'}。核算金额含预占，实际账单以服务商结算为准。`;
+  }
   function renderTasks() {
+    renderBudget();
     const active=document.activeElement, focusTask=active?.closest('[data-task-id]')?.dataset.taskId, focusLabel=active?.textContent;
     const q=$('task-search').value.trim().toUpperCase(),filter=$('task-filter').value;
     const groups=taskView.groupedTasks(tasks,id=>tasks.find(t=>t.id===id)||relatedTasks.get(id),{query:q,filter,catalog:productCatalog,hasReport:reportPath});
@@ -165,13 +172,16 @@
     if(loading||document.hidden)return;loading=true;
     try {
       const {data,error}=await client.from('voc_tasks').select('*').order('created_at',{ascending:false}).range(0,loadedLimit-1);if(error)throw error;
-      const budget=await client.rpc('voc_budget_summary');if(!budget.error)budgetSummary=budget.data;else budgetSummary=null;
+      const budget=await client.rpc('voc_budget_overview');if(!budget.error)budgetSummary=budget.data;else budgetSummary=null;
       const parentIds=[...new Set(data.map(t=>t.duplicate_of).filter(id=>id&&!data.some(t=>t.id===id)))];
       if(parentIds.length){const parents=await client.from('voc_tasks').select('*').in('id',parentIds);if(parents.error)throw parents.error;relatedTasks=new Map(parents.data.map(t=>[t.id,t]));}else relatedTasks=new Map();
       const next=data;hasMore=data.length===loadedLimit;
       const signature=JSON.stringify([next,budgetSummary,[...relatedTasks.values()]]);tasks=next;if(signature!==lastTaskRender){lastTaskRender=signature;renderTasks();if($('configure-dialog').open)updateSummary()}message($('tasks-error'),'');
     }catch(e){message($('tasks-error'),'任务列表读取失败，保留上次结果：'+e.message)}finally{loading=false}
   }
+  function setNavigation(collapsed){document.body.classList.toggle('nav-collapsed',collapsed);$('sidebar-toggle').setAttribute('aria-expanded',String(!collapsed));$('sidebar-toggle').setAttribute('aria-label',collapsed?'展开导航':'收起导航');$('sidebar-toggle').textContent=collapsed?'⇥':'⇤';}
+  try{setNavigation(localStorage.getItem('voc-navigation-collapsed')==='true')}catch{}
+  $('sidebar-toggle').onclick=()=>{const collapsed=!document.body.classList.contains('nav-collapsed');setNavigation(collapsed);try{localStorage.setItem('voc-navigation-collapsed',String(collapsed))}catch{}};
   $('asin-input').addEventListener('keydown', event => { if ((event.key === 'Enter' || event.key === ' ') && !event.isComposing) { event.preventDefault(); addInput(); } });
   $('asin-form').onsubmit = event => { event.preventDefault(); openDialog(); };
   $('close-dialog').onclick = closeDialog; $('cancel-dialog').onclick = closeDialog;
