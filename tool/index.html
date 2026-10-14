@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <title>工具台 · 关键词作战台</title>
-  <link rel="stylesheet" href="../assets/styles.css"><link rel="stylesheet" href="../assets/history.css?v=20261014-history-1">
+  <link rel="stylesheet" href="../assets/styles.css"><link rel="stylesheet" href="../assets/history.css?v=20261014-history-2">
   <link rel="stylesheet" href="../assets/task-list.css?v=20261014-task-list">
   <style>
     .tool-switcher{display:flex;align-items:center;gap:12px;min-width:0;padding:10px 0}
@@ -73,7 +73,7 @@
       </div>
       <p class="refresh-note">页面每 30 秒自动刷新，也可以手动刷新。任务耗时为累计实际处理时间，不含排队及等待确认；历史任务缺少完整计时记录时显示“未记录”。</p>
     </section>
-  </div><section id="report-history" class="panel history-panel" hidden aria-labelledby="history-title"><div class="panel-title"><div><h1 id="history-title">历史报告</h1><p>每个 ASIN 一张卡片，关键词与广告、竞对与图片分别保留最新已生成报告；新任务失败不会替换原报告。</p></div><button id="refresh-history" type="button" class="secondary-button">刷新报告</button></div><input id="history-search" type="search" aria-label="搜索历史报告" placeholder="搜索 ASIN 或商品名称"><p id="history-count" class="muted" role="status">正在读取报告…</p><p id="history-message" class="message" role="status" hidden></p><div id="history-cards" class="history-grid"></div></section>
+  </div><section id="report-history" class="panel history-panel" hidden aria-labelledby="history-title"><div class="panel-title"><div><h1 id="history-title">历史报告</h1><p>按报告类型分类，每个模块内同一 ASIN 只显示最新已生成报告；新任务失败不会替换原报告。</p></div><button id="refresh-history" type="button" class="secondary-button">刷新报告</button></div><input id="history-search" type="search" aria-label="搜索历史报告" placeholder="搜索 ASIN 或商品名称"><p id="history-count" class="muted" role="status">正在读取报告…</p><p id="history-message" class="message" role="status" hidden></p><div class="history-tabs" role="tablist" aria-label="历史报告分类"><button id="history-keyword-tab" type="button" role="tab" aria-selected="true" aria-controls="history-keyword-panel">关键词与广告</button><button id="history-comparison-tab" type="button" role="tab" aria-selected="false" aria-controls="history-comparison-panel" tabindex="-1">竞对和图片分析</button></div><section id="history-keyword-panel" role="tabpanel" aria-labelledby="history-keyword-tab"><h2 class="history-module-title">关键词与广告</h2><div id="history-cards" class="history-grid"></div></section><section id="history-comparison-panel" role="tabpanel" aria-labelledby="history-comparison-tab" hidden><h2 class="history-module-title">竞对和图片分析</h2><div id="history-comparison-cards" class="history-grid"></div></section></section>
   </main>
   <dialog id="retained-tasks" aria-labelledby="retained-title"><div class="panel-title"><h2 id="retained-title">其他待处理任务</h2><button id="close-retained" type="button" class="text-button">关闭</button></div><p>这些任务较早，但尚未结束或已暂停，因此保留供你继续处理。</p><div class="table-scroll"><table class="task-table"><thead><tr><th>提交时间</th><th>ASIN</th><th>状态</th><th>任务耗时</th><th>进度 / 说明</th><th>操作</th></tr></thead><tbody id="retained-tasks-body"></tbody></table></div><footer class="retained-pagination"><button id="retained-prev" type="button" class="secondary-button">上一页</button><span id="retained-page"></span><button id="retained-next" type="button" class="secondary-button">下一页</button></footer></dialog>
 
@@ -122,7 +122,7 @@
   <script src="../assets/common.js"></script>
   <script src="../assets/product-identity.js?v=20261013-image-identity"></script>
   <script src="../assets/comparison-ui.js?v=20261014-qa-fixes-legacy"></script>
-  <script src="../assets/task-list.js?v=20261014-history-1"></script>
-  <script src="../assets/history-data.js?v=20261014-history-1"></script><script src="../assets/history-ui.js?v=20261014-history-1"></script><script src="../assets/tool.js?v=20261014-history-1"></script>
+  <script src="../assets/task-list.js?v=20261014-history-2"></script>
+  <script src="../assets/vendor/fflate.js"></script><script src="../assets/history-metadata.js?v=20261014-history-2"></script><script src="../assets/history-data.js?v=20261014-history-2"></script><script src="../assets/history-ui.js?v=20261014-history-2"></script><script src="../assets/tool.js?v=20261014-history-2"></script>
 </body>
 </html>
