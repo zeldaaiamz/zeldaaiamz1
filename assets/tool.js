@@ -89,6 +89,7 @@
     const asinInput = document.querySelector('#asin');
     const fileInput = document.querySelector('#report-file');
     const fileName = document.querySelector('#file-name');
+    const history=window.KeywordReportHistory.mount(app);
     let reuseSource = null;
     let submitting = false;
     let pendingSubmission = null;
@@ -175,9 +176,9 @@
           cell.className = 'empty-cell';
           cell.textContent = '还没有任务，先提交第一份报表。';
           empty.append(cell);
-          taskBody.append(empty);
+          taskBody.append(empty);await history.update([],task=>taskRow(task,()=>{},()=>{},controlTask));
         } else {
-          data.forEach((task) => taskBody.append(taskRow(task, async (t,compare) => {
+          const buildRow=task=>taskRow(task, async (t,compare) => {
             if(!compare)return selectSource(t);
             if(submitting)return;
             submitting=true;
@@ -187,10 +188,12 @@
               showMessage(submitMessage,'已创建独立竞对任务（04、05），正在整理候选。请在该任务中选择竞对并继续。','success');
               await loadTasks();
             }catch(error){showMessage(submitMessage,humanError(error));}finally{submitting=false;}
-          }, t => window.KeywordComparison.open(t, app, loadTasks), controlTask)));
+          }, t => window.KeywordComparison.open(t, app, loadTasks), controlTask);
+          window.KeywordHistoryData.recentTasks(data).forEach(task=>taskBody.append(buildRow(task)));
+          await history.update(data,buildRow);
         }
       } catch (error) {
-        showMessage(taskMessage, humanError(error));
+        showMessage(taskMessage, humanError(error));showMessage(document.getElementById('history-message'),humanError(error));
       } finally {
         updateTaskList();
         refreshButton.disabled = false;

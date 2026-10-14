@@ -37,7 +37,7 @@ function mount(){
  const order={attention:0,failed:1,blocked:1,partial:2,running:3,paused:4,done:5};rows.sort((a,b)=>order[a.dataset.group]-order[b.dataset.group]||b.dataset.created.localeCompare(a.dataset.created)).forEach(r=>body.append(r));
  let count=0;rows.forEach(r=>{r.hidden=!(selected==='all'||r.dataset.group===selected)||!r.dataset.asin.includes(query);if(!r.hidden)count++;});
  body.querySelector('.task-filter-empty')?.remove();if(rows.length&&!count){const r=body.insertRow();r.className='task-filter-empty';const c=r.insertCell();c.colSpan=6;c.className='empty-cell';c.textContent='没有匹配任务，请更换 ASIN 或筛选条件。';}
- document.querySelector('#task-count').textContent=`显示 ${count} / ${rows.length} 条 · 账户全部已加载任务`;
+ document.querySelector('#task-count').textContent=`显示 ${count} / ${rows.length} 条 · 最近 15 条任务`;
  }
  search.addEventListener('input',render);document.querySelector('#task-clear').onclick=()=>{search.value='';selected='all';render();search.focus();};return render;
 }
