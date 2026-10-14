@@ -26,20 +26,12 @@ function enhance(row,t){
  return row;
 }
 function mount(){
- const body=document.querySelector('#tasks-body'),bar=document.querySelector('#task-filters');if(!bar)return()=>{};
- let selected='all';const search=document.querySelector('#task-search');
- function render(){
- const rows=[...body.rows].filter(r=>r.dataset.group);const query=search.value.trim().toUpperCase();
- bar.replaceChildren();Object.entries({all:'全部',...groups}).forEach(([key,label])=>{
- const count=rows.filter(r=>key==='all'||r.dataset.group===key).length;
- const b=node('button',`${label} ${count}`,'task-filter'+(selected===key?' active':''));b.type='button';b.setAttribute('aria-pressed',String(selected===key));b.onclick=()=>{selected=key;render();};bar.append(b);
- });
- rows.sort((a,b)=>b.dataset.created.localeCompare(a.dataset.created)).forEach(r=>body.append(r));
- let count=0;rows.forEach(r=>{r.hidden=!(selected==='all'||r.dataset.group===selected)||!r.dataset.asin.includes(query);if(!r.hidden)count++;});
- body.querySelector('.task-filter-empty')?.remove();if(rows.length&&!count){const r=body.insertRow();r.className='task-filter-empty';const c=r.insertCell();c.colSpan=6;c.className='empty-cell';c.textContent='没有匹配任务，请更换 ASIN 或筛选条件。';}
- document.querySelector('#task-count').textContent=`显示 ${count} / ${rows.length} 条 · 最近 15 条任务`;
+ const body=document.querySelector('#tasks-body'),bar=document.querySelector('#task-filters');if(!bar)return()=>{};let selected='all',tasks=[],builder;const search=document.querySelector('#task-search');
+ function render(data,build){if(data){tasks=data;builder=build;}if(!builder)return;const query=search.value.trim().toUpperCase(),matched=[...tasks].sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at))||String(b.id).localeCompare(String(a.id))).filter(t=>(selected==='all'||group(t)===selected)&&t.asin.includes(query)),visible=matched.slice(0,15);
+ bar.replaceChildren();Object.entries({all:'全部',...groups}).forEach(([key,label])=>{const count=tasks.filter(t=>key==='all'||group(t)===key).length,b=node('button',`${label} ${count}`,'task-filter'+(selected===key?' active':''));b.type='button';b.setAttribute('aria-pressed',String(selected===key));b.onclick=()=>{selected=key;render();};bar.append(b);});body.replaceChildren(...visible.map(builder));if(!visible.length){const row=body.insertRow(),c=row.insertCell();c.colSpan=6;c.className='empty-cell';c.textContent=tasks.length?'没有匹配任务，请更换 ASIN 或筛选条件。':'暂无未删除任务，可查看回收站或历史报告。';}
+ document.querySelector('#task-count').textContent=`显示 ${visible.length} / ${matched.length} 条匹配任务 · 每页最多15条 · 标签统计全部未删除任务`;window.KeywordTaskManager?.current?.visible(visible);
  }
- search.addEventListener('input',render);document.querySelector('#task-clear').onclick=()=>{search.value='';selected='all';render();search.focus();};return render;
+ search.addEventListener('input',()=>render());document.querySelector('#task-clear').onclick=()=>{search.value='';selected='all';render();search.focus();};return render;
 }
 window.KeywordTaskList={group,enhance,mount};
 })();

@@ -34,23 +34,13 @@
   const evidenceLabels={title:'标题',description:'产品描述',bullets:'五点原文',attributes:'属性原文',photos:'图片链接'};
   const hasEvidence=v=>typeof v==='string'?Boolean(v.trim()):Array.isArray(v)?v.length>0&&v.every(hasEvidence):Boolean(v&&typeof v==='object'&&Object.values(v).some(hasEvidence));
   function evidenceEditor(t,body,app,message,onDone){
-    const state=t.comparison_state||{},products=state.products||[];
-    if(!state.autoEvidenceAttempted&&state.evidenceBlock!=='product'){body.append(element('p','本任务处于历史资料等待阶段，当前没有可执行的自动补齐步骤。已保存资料保留，后台检查会记录阻塞原因。'));
-      if(state.notice)body.append(element('p',state.notice));
-      if(state.health?.reason)body.append(element('p',state.health.reason));
-      body.append(element('p',`任务编号：${t.id}`));return;}
-    body.append(element('p',state.autoEvidenceAttempted?'自动采集已结束，尚未取得完整原文，任务已停止等待处理。已采集资料保留，无需手填。':'系统将复用已采集资料，并获取对应 ASIN 的公开原文；没有可靠原文的字段不会编造。'));
-    body.append(element('p',`任务编号：${t.id}`));
-    if(state.notice)body.append(element('p',/补录|维护人员|填写/.test(state.notice)?'本任务已由后台自动处理原文缺失；成功资料直接复用，无需填写。':state.notice));
-    if(state.health?.reason)body.append(element('p',`检查结果：${state.health.reason}`));
-    for(const p of products){
-      const section=element('fieldset',undefined,'evidence-product');section.append(element('legend',`${p.role==='own'?'我方':'竞对'} ${p.asin}`));
-      section.append(element('p',p.listingEvidenceComplete?'文字资料已齐全；可选字段未取得不阻止文字对比。':state.autoEvidenceAttempted?'文字资料缺失，自动采集已停止；已保存资料可展开核对。':'系统将处理缺失文字资料，无需手填。'));
-      const detail=element('details');detail.append(element('summary','查看系统已采集资料与来源'),element('pre',JSON.stringify({title:p.title,description:p.description,bullets:p.bullets,attributes:p.attributes,missingFields:p.missingFields,autoEvidence:p.autoEvidence,manualEvidence:p.manualEvidence},null,2)));section.append(detail);body.append(section);
-    }
-    body.append(element('p','自动补齐优先使用免费公开原文；成功留底不重复取数。继续仍受原任务已批准名单与取数次数约束，不批准新的 AI 判断。图片资料不足时由图片流程单独处理。'));
-    if(state.evidenceBlock==='category'||state.rawFeatureResponse||state.autoEvidenceAttempted){body.append(element('p','自动采集或接口解析暂未取得完整资料，系统已保留记录等待处理；不需要你填写资料，也不会无限重试。'));return;}
-    body.append(element('p','后台将自动接续本任务并获取缺失原文；关闭窗口即可，无需填写或重复提交。'));
+    const state=t.comparison_state||{},products=Array.isArray(state.products)?state.products:[];body.append(element('p','自动采集未取得完整资料，已保存数据保留。下一步由你补齐可靠原文，或登记给管理员核查；本页不自动取数、不调用AI。'));body.append(element('p','任务编号：'+t.id));const reason=state.health?.reason||state.notice;if(reason)body.append(element('p','受阻原因：'+reason));window.KeywordTaskManager?.current?.helpActions(body,t);
+    const editors=[];const editable=state.evidenceBlock!=='category'&&!state.rawFeatureResponse;
+    for(const p of products){const section=element('fieldset',undefined,'evidence-product');section.append(element('legend',(p.role==='own'?'我方':'竞对')+' '+p.asin));const details=element('details');details.append(element('summary','查看已采集资料与来源'),element('pre',JSON.stringify({title:p.title,description:p.description,bullets:p.bullets,attributes:p.attributes,missingFields:p.missingFields,autoEvidence:p.autoEvidence,manualEvidence:p.manualEvidence},null,2)));section.append(details);
+      if(editable){const fields={};for(const key of ['title','description','bullets','attributes']){if(hasEvidence(p[key])||hasEvidence(state.manualEvidence?.[p.asin]?.fields?.[key]))continue;const label=element('label',evidenceLabels[key]),input=element('textarea');input.setAttribute('aria-label',p.asin+' '+evidenceLabels[key]);input.placeholder=key==='bullets'?'每行一条五点原文':key==='attributes'?'每行一项：属性名称：原文':'仅填写可核对的商品原文';label.append(input);section.append(label);fields[key]=input;}if(Object.keys(fields).length){const label=element('label','资料来源（商品页或已核对文件）'),source=element('input');source.setAttribute('aria-label',p.asin+' 资料来源');label.append(source);section.append(label);editors.push({asin:p.asin,fields,source});}}
+      body.append(section);}
+    if(editors.length){const save=element('button','保存资料（不取数）');save.type='button';save.onclick=async()=>{app.hideMessage(message);save.disabled=true;try{const entries=editors.map(e=>{const fields={};for(const [key,input] of Object.entries(e.fields)){const text=input.value.trim();if(!text)continue;if(key==='bullets')fields[key]=text.split('\n').map(s=>s.trim()).filter(Boolean);else if(key==='attributes'){fields[key]={};for(const line of text.split('\n').filter(s=>s.trim())){const match=line.match(/^([^:：]+)[:：](.+)$/);if(!match)throw Error('属性请按“名称：原文”逐行填写');fields[key][match[1].trim()]=match[2].trim();}}else fields[key]=text;}return{asin:e.asin,source:e.source.value.trim(),fields};}).filter(e=>Object.keys(e.fields).length);if(!entries.length)throw Error('请填写至少一项缺失原文和对应来源');if(entries.some(e=>!e.source))throw Error('请填写资料来源');const result=await app.client.rpc('save_keyword_comparison_evidence',{p_task_id:t.id,p_revision:state.evidenceRevision||0,p_entries:entries,p_continue:false});if(result.error)throw result.error;app.showMessage(message,'资料已保存，未取数、未调用AI。继续分析需管理员核对已有授权与留底。','success');save.disabled=true;await onDone();}catch(e){app.showMessage(message,app.humanError(e));save.disabled=false;}};body.append(save);}
+    if(!editable||!editors.length)body.append(element('p','当前为接口/品类异常或没有可补录字段，请登记核查并复制诊断交给管理员。'));
   }
   async function open(task, app, onDone) {
     const dialog = document.getElementById('comparison-review');

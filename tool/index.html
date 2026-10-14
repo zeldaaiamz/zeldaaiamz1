@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <title>工具台 · 关键词作战台</title>
-  <link rel="stylesheet" href="../assets/styles.css"><link rel="stylesheet" href="../assets/history.css?v=20261014-history-3">
+  <link rel="stylesheet" href="../assets/styles.css"><link rel="stylesheet" href="../assets/history.css?v=management-20261014-1">
   <link rel="stylesheet" href="../assets/task-list.css?v=20261014-task-list">
   <style>
     .tool-switcher{display:flex;align-items:center;gap:12px;min-width:0;padding:10px 0}
@@ -59,13 +59,13 @@
     </section>
 
     <section class="panel task-list-panel" aria-labelledby="tasks-title">
-      <div class="panel-title task-list-title"><div><h2 id="tasks-title">我的任务</h2><p class="muted">仅显示最近 15 条，按提交时间从新到旧排列；可用标签筛选任务状态</p></div><button id="refresh-tasks" class="secondary-button" type="button">刷新任务</button></div>
+      <div class="panel-title task-list-title"><div><h2 id="tasks-title">我的任务</h2><p class="muted">按时间从新到旧显示当前筛选的最近 15 条；标签统计全部未删除任务</p></div><button id="refresh-tasks" class="secondary-button" type="button">刷新任务</button></div>
       <p class="muted">暂停后保留已保存的数据；重新启动会继续本任务。暂停生效前，已发出的请求仍可能计费。</p>
       <div class="task-filters" id="task-filters" role="group" aria-label="任务状态筛选"></div>
       <div class="task-toolbar"><input id="task-search" type="search" aria-label="搜索 ASIN" placeholder="搜索 ASIN"><button id="task-clear" class="text-button" type="button">清除筛选</button></div>
       <p id="task-count" class="task-count" aria-live="polite"></p>
       <div id="tasks-message" class="message" role="status" hidden></div>
-      <button id="open-retained" type="button" class="secondary-button" hidden>查看其他待处理任务</button><div class="table-scroll">
+      <div class="task-management-toolbar"><label><input id="task-select-all" type="checkbox"> 全选当前页可删除任务</label><span id="task-selected-count">已选 0 条</span><button id="task-delete-selected" type="button" class="secondary-button" disabled>删除所选</button><button id="open-task-trash" type="button" class="secondary-button">回收站（0）</button><button id="open-task-help" type="button" class="secondary-button">待人工核查（0）</button></div><button id="open-retained" type="button" class="secondary-button" hidden>查看其他待处理任务</button><div class="table-scroll">
         <table class="task-table">
           <thead><tr><th>提交时间</th><th>ASIN</th><th>状态</th><th title="累计实际处理时间，不含排队及等待确认">任务耗时</th><th>进度 / 说明</th><th>报告／任务操作</th></tr></thead>
           <tbody id="tasks-body"><tr><td colspan="6" class="empty-cell">正在加载任务…</td></tr></tbody>
@@ -75,7 +75,7 @@
     </section>
   </div><section id="report-history" class="panel history-panel" hidden aria-labelledby="history-title"><div class="panel-title"><div><h1 id="history-title">历史报告</h1><p>按报告类型分类，每个模块内同一 ASIN 只显示最新已生成报告；新任务失败不会替换原报告。</p></div><button id="refresh-history" type="button" class="secondary-button">刷新报告</button></div><input id="history-search" type="search" aria-label="搜索历史报告" placeholder="搜索 ASIN 或商品名称"><p id="history-count" class="muted" role="status">正在读取报告…</p><p id="history-message" class="message" role="status" hidden></p><div class="history-tabs" role="tablist" aria-label="历史报告分类"><button id="history-keyword-tab" type="button" role="tab" aria-selected="true" aria-controls="history-keyword-panel">关键词与广告</button><button id="history-comparison-tab" type="button" role="tab" aria-selected="false" aria-controls="history-comparison-panel" tabindex="-1">竞对和图片分析</button></div><section id="history-keyword-panel" role="tabpanel" aria-labelledby="history-keyword-tab"><h2 class="history-module-title">关键词与广告</h2><div id="history-cards" class="history-grid"></div></section><section id="history-comparison-panel" role="tabpanel" aria-labelledby="history-comparison-tab" hidden><h2 class="history-module-title">竞对和图片分析</h2><div id="history-comparison-cards" class="history-grid"></div></section></section>
   </main>
-  <dialog id="retained-tasks" aria-labelledby="retained-title"><div class="panel-title"><h2 id="retained-title">其他待处理任务</h2><button id="close-retained" type="button" class="text-button">关闭</button></div><p>这些任务较早，但尚未结束或已暂停，因此保留供你继续处理。</p><div class="table-scroll"><table class="task-table"><thead><tr><th>提交时间</th><th>ASIN</th><th>状态</th><th>任务耗时</th><th>进度 / 说明</th><th>操作</th></tr></thead><tbody id="retained-tasks-body"></tbody></table></div><footer class="retained-pagination"><button id="retained-prev" type="button" class="secondary-button">上一页</button><span id="retained-page"></span><button id="retained-next" type="button" class="secondary-button">下一页</button></footer></dialog>
+  <dialog id="task-management-dialog" aria-labelledby="task-management-title"><div class="panel-title"><h2 id="task-management-title">任务管理</h2><button id="close-task-management" type="button" class="secondary-button">关闭</button></div><p id="task-management-message" class="message" role="status" hidden></p><div id="task-management-body"></div></dialog><dialog id="retained-tasks" aria-labelledby="retained-title"><div class="panel-title"><h2 id="retained-title">其他待处理任务</h2><button id="close-retained" type="button" class="text-button">关闭</button></div><p>这些任务较早，但尚未结束或已暂停，因此保留供你继续处理。</p><div class="table-scroll"><table class="task-table"><thead><tr><th>提交时间</th><th>ASIN</th><th>状态</th><th>任务耗时</th><th>进度 / 说明</th><th>操作</th></tr></thead><tbody id="retained-tasks-body"></tbody></table></div><footer class="retained-pagination"><button id="retained-prev" type="button" class="secondary-button">上一页</button><span id="retained-page"></span><button id="retained-next" type="button" class="secondary-button">下一页</button></footer></dialog>
 
   <dialog id="rule-settings" aria-labelledby="rule-settings-title">
     <form id="rule-settings-form" novalidate>
@@ -119,10 +119,10 @@
   <script src="../assets/rule-settings.js?v=20261008-ad6"></script>
   <script src="../assets/vendor/supabase.js"></script>
   <script src="../assets/config.js"></script>
-  <script src="../assets/common.js"></script>
+  <script src="../assets/common.js?v=management-20261014-1"></script>
   <script src="../assets/product-identity.js?v=20261013-image-identity"></script>
-  <script src="../assets/comparison-ui.js?v=20261014-qa-fixes-legacy"></script>
-  <script src="../assets/task-list.js?v=20261014-history-3"></script>
-  <script src="../assets/vendor/fflate.js"></script><script src="../assets/history-metadata.js?v=20261014-history-3"></script><script src="../assets/history-data.js?v=20261014-history-3"></script><script src="../assets/history-ui.js?v=20261014-history-3"></script><script src="../assets/tool.js?v=20261014-history-3"></script>
+  <script src="../assets/comparison-ui.js?v=management-20261014-1"></script>
+  <script src="../assets/task-management.js?v=management-20261014-1"></script><script src="../assets/task-list.js?v=management-20261014-1"></script>
+  <script src="../assets/vendor/fflate.js"></script><script src="../assets/history-metadata.js?v=management-20261014-1"></script><script src="../assets/history-data.js?v=management-20261014-1"></script><script src="../assets/history-ui.js?v=management-20261014-1"></script><script src="../assets/tool.js?v=management-20261014-1"></script>
 </body>
 </html>

@@ -4,10 +4,13 @@
   const page = document.body.dataset.page;
   const config = window.APP_CONFIG || {};
   const rootUrl = new URL(page === 'auth' ? './' : '../', window.location.href);
-  const route = (path) => new URL(path, rootUrl).href;
+  const release='management-20261014-1';
+  const route = (path) => {const target=new URL(path,rootUrl);if(target.origin===location.origin&&/\/(tool|report)\//.test(target.pathname))target.searchParams.set('v',release);return target.href;};
   const client = window.supabase?.createClient?.(config.supabaseUrl, config.supabaseAnonKey, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
   });
+
+  if(['tool','report'].includes(page)){const current=new URL(location.href);if(current.searchParams.get('v')!==release){current.searchParams.set('v',release);location.replace(current.href);return;}if('serviceWorker' in navigator)navigator.serviceWorker.register(new URL('tool-shell-sw.js?v='+release,rootUrl),{scope:rootUrl.pathname,updateViaCache:'none'}).catch(()=>{});}
 
   function showMessage(element, text, type = 'error') {
     if (!element) return;

@@ -134,6 +134,7 @@
     });
 
     const updateTaskList = window.KeywordTaskList.mount();
+    const management=window.KeywordTaskManager?.mount(app,loadTasks);
     const pendingControls = new Set();
     async function controlTask(task, action, button) {
       if (pendingControls.has(task.id)) return;
@@ -168,16 +169,7 @@
           if(images.error)throw images.error;
           const byId=new Map((images.data||[]).map(s=>[s.task_id,s]));data.slice(offset,offset+100).forEach(t=>t.image_session=byId.get(t.id)||null);
         }
-        taskBody.replaceChildren();
-        if (!data?.length) {
-          const empty = document.createElement('tr');
-          const cell = document.createElement('td');
-          cell.colSpan = 6;
-          cell.className = 'empty-cell';
-          cell.textContent = '还没有任务，先提交第一份报表。';
-          empty.append(cell);
-          taskBody.append(empty);await history.update([],task=>taskRow(task,()=>{},()=>{},controlTask));
-        } else {
+        const removed=await client.from('keyword_task_recycle').select('task_id,deleted_at,restored_at');if(removed.error)throw removed.error;const requests=await client.from('keyword_task_help_requests').select('task_id,status,reason');if(requests.error)throw requests.error;management?.update(data,removed.data||[],requests.data||[]);const active=management?management.active():data;
           const buildRow=task=>taskRow(task, async (t,compare) => {
             if(!compare)return selectSource(t);
             if(submitting)return;
@@ -189,9 +181,8 @@
               await loadTasks();
             }catch(error){showMessage(submitMessage,humanError(error));}finally{submitting=false;}
           }, t => window.KeywordComparison.open(t, app, loadTasks), controlTask);
-          window.KeywordHistoryData.recentTasks(data).forEach(task=>taskBody.append(buildRow(task)));
-          await history.update(data,buildRow);
-        }
+          const managedRow=t=>management?management.decorate(buildRow(t),t):buildRow(t);updateTaskList(active,managedRow);
+          await history.update(data,managedRow,active);
       } catch (error) {
         showMessage(taskMessage, humanError(error));showMessage(document.getElementById('history-message'),humanError(error));
       } finally {
