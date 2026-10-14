@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="light">
   <title>工具台 · 关键词作战台</title>
   <link rel="stylesheet" href="../assets/styles.css">
+  <link rel="stylesheet" href="../assets/task-list.css?v=20261014-task-list">
   <style>
     .tool-switcher{display:flex;align-items:center;gap:12px;min-width:0;padding:10px 0}
     .tool-switcher-field{position:relative;min-width:0}
@@ -56,13 +57,16 @@
       </form>
     </section>
 
-    <section class="panel" aria-labelledby="tasks-title">
-      <div class="panel-title task-list-title"><div><p class="step-label">STEP 02</p><h2 id="tasks-title">我的最近任务</h2></div><button id="refresh-tasks" class="secondary-button" type="button">刷新任务</button></div>
+    <section class="panel task-list-panel" aria-labelledby="tasks-title">
+      <div class="panel-title task-list-title"><div><h2 id="tasks-title">我的任务</h2><p class="muted">待确认和异常任务优先显示</p></div><button id="refresh-tasks" class="secondary-button" type="button">刷新任务</button></div>
       <p class="muted">暂停后保留已保存的数据；重新启动会继续本任务。暂停生效前，已发出的请求仍可能计费。</p>
+      <div class="task-filters" id="task-filters" role="group" aria-label="任务状态筛选"></div>
+      <div class="task-toolbar"><input id="task-search" type="search" aria-label="搜索 ASIN" placeholder="搜索 ASIN"><button id="task-clear" class="text-button" type="button">清除筛选</button></div>
+      <p id="task-count" class="task-count" aria-live="polite"></p>
       <div id="tasks-message" class="message" role="status" hidden></div>
       <div class="table-scroll">
         <table class="task-table">
-          <thead><tr><th>提交时间</th><th>ASIN</th><th>状态</th><th title="累计实际处理时间，不含排队及等待确认">任务耗时</th><th>失败原因</th><th>报告／任务操作</th></tr></thead>
+          <thead><tr><th>提交时间</th><th>ASIN</th><th>状态</th><th title="累计实际处理时间，不含排队及等待确认">任务耗时</th><th>进度 / 说明</th><th>报告／任务操作</th></tr></thead>
           <tbody id="tasks-body"><tr><td colspan="6" class="empty-cell">正在加载任务…</td></tr></tbody>
         </table>
       </div>
@@ -114,6 +118,7 @@
   <script src="../assets/common.js"></script>
   <script src="../assets/product-identity.js?v=20261013-image-identity"></script>
   <script src="../assets/comparison-ui.js?v=20261013-remove-text-check"></script>
-  <script src="../assets/tool.js?v=20261010-pause"></script>
+  <script src="../assets/task-list.js?v=20261014-task-list"></script>
+  <script src="../assets/tool.js?v=20261014-task-list"></script>
 </body>
 </html>

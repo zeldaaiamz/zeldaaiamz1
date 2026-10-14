@@ -73,7 +73,7 @@
       actionCell.append(button);
     }
     row.append(actionCell);
-    return row;
+    return window.KeywordTaskList.enhance(row, task);
   }
 
   async function start() {
@@ -127,6 +127,7 @@
       asinInput.value = asinInput.value.toUpperCase();
     });
 
+    const updateTaskList = window.KeywordTaskList.mount();
     const pendingControls = new Set();
     async function controlTask(task, action, button) {
       if (pendingControls.has(task.id)) return;
@@ -177,6 +178,7 @@
       } catch (error) {
         showMessage(taskMessage, humanError(error));
       } finally {
+        updateTaskList();
         refreshButton.disabled = false;
       }
     }
