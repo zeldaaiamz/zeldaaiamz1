@@ -44,6 +44,8 @@
     });
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(taskId || '')) {
       loading.hidden = true;
+      status.textContent='链接无效';status.className='status-badge failed';
+      meta.textContent='请从任务列表重新进入报告。';
       showMessage(message, '任务号格式不正确，请返回工具页重新进入报告。');
       return;
     }
@@ -125,6 +127,8 @@
         await refreshImageStatus();
       } catch (error) {
         loading.hidden = true;
+        status.textContent='报告读取失败';status.className='status-badge failed';
+        meta.textContent='请返回任务列表核对，或刷新后重试。';
         showMessage(message, humanError(error));
       }
     }
@@ -133,5 +137,5 @@
     window.setInterval(loadReport, config.refreshIntervalMs || 30000);
   }
 
-  start().catch((error) => {document.querySelector('#report-loading').hidden=true;showMessage(document.querySelector('#report-message'), humanError(error));});
+  start().catch((error) => {document.querySelector('#report-loading').hidden=true;document.querySelector('#report-status').textContent='报告读取失败';document.querySelector('#report-meta').textContent='请返回任务列表核对，或刷新后重试。';showMessage(document.querySelector('#report-message'), humanError(error));});
 }());
