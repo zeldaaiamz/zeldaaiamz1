@@ -91,6 +91,11 @@
     const fileName = document.querySelector('#file-name');
     let reuseSource = null;
     let submitting = false;
+    let pendingSubmission = null;
+    const pendingKey='keyword-pending-submit:'+user.id;
+    try{pendingSubmission=JSON.parse(sessionStorage.getItem(pendingKey)||'null');}catch{}
+    function savePending(){try{if(pendingSubmission)sessionStorage.setItem(pendingKey,JSON.stringify(pendingSubmission));else sessionStorage.removeItem(pendingKey);return true;}catch{return false;}}
+    let loadingTasks = false;
     function selectSource(task) {
       if (submitting) return;
       reuseSource = task;
@@ -145,14 +150,23 @@
     }
 
     async function loadTasks() {
+      if(loadingTasks)return;
+      loadingTasks=true;
       hideMessage(taskMessage);
       refreshButton.disabled = true;
       try {
-        const { data, error } = await client.from('keyword_tasks')
-          .select('id,asin,status,control_state,created_at,processing_ms,processing_run_id,report_url,failure_reason,upload_path,comparison_phase,comparison_request,comparison_asins:comparison_state->competitorAsins,core_keyword,comparison_pricing:comparison_state->pricing')
-          .order('created_at', { ascending: false })
-          .limit(config.taskLimit || 10);
-        if (error) throw error;
+        const data=[];
+        for(let offset=0;;offset+=100){
+          const batch=await client.from('keyword_tasks').select('id,asin,status,control_state,created_at,processing_ms,processing_run_id,report_url,failure_reason,upload_path,comparison_phase,comparison_request,comparison_asins:comparison_state->competitorAsins,core_keyword,comparison_pricing:comparison_state->pricing,comparison_state').order('created_at',{ascending:false}).order('id',{ascending:false}).range(offset,offset+99);
+          if(batch.error)throw batch.error;
+          data.push(...(batch.data||[]));if((batch.data||[]).length<100)break;
+        }
+        for(let offset=0;offset<data.length;offset+=100){
+          const ids=data.slice(offset,offset+100).filter(t=>t.comparison_phase).map(t=>t.id);if(!ids.length)continue;
+          const images=await client.from('keyword_image_sessions').select('task_id,status,error,image_status:state->workflow->status').in('task_id',ids);
+          if(images.error)throw images.error;
+          const byId=new Map((images.data||[]).map(s=>[s.task_id,s]));data.slice(offset,offset+100).forEach(t=>t.image_session=byId.get(t.id)||null);
+        }
         taskBody.replaceChildren();
         if (!data?.length) {
           const empty = document.createElement('tr');
@@ -180,6 +194,7 @@
       } finally {
         updateTaskList();
         refreshButton.disabled = false;
+        loadingTasks=false;
       }
     }
 
@@ -196,19 +211,27 @@
       if (!source && !file) return showMessage(submitMessage, '请选择广告搜索词报表。');
       const extension = (source?.upload_path || file.name).split('.').pop().toLowerCase();
       if (!['xlsx', 'csv'].includes(extension)) return showMessage(submitMessage, '只支持 .xlsx 或 .csv 文件。');
+      if(!source&&file.size===0)return showMessage(submitMessage,'报表是空文件，请选择包含数据的报表。');
       if (!source && file.size > config.maxUploadBytes) return showMessage(submitMessage, '文件超过 10 MB，请压缩数据范围后重新上传。');
 
       submitting = true;
       setButtonBusy(submitButton, true, '提交任务', source ? '正在提交重算任务…' : '正在上传…');
-      const taskId = crypto.randomUUID();
+      const signature=JSON.stringify({asin,analysisRules,source:source?.id||null,file:source?null:{name:file.name,size:file.size,lastModified:file.lastModified}});
+      if(pendingSubmission&&pendingSubmission.signature!==signature){submitting=false;setButtonBusy(submitButton,false,'提交任务','');return showMessage(submitMessage,'上次提交结果尚未核实，请恢复原资料后重试，避免重复任务。');}
+      if(!pendingSubmission)pendingSubmission={id:crypto.randomUUID(),signature,uploaded:Boolean(source)};
+      if(!savePending()){submitting=false;setButtonBusy(submitButton,false,'提交任务','');return showMessage(submitMessage,'浏览器无法保存提交记录，请恢复本机存储后再提交，避免重复任务。');}
+      const taskId=pendingSubmission.id;
       const uploadPath = source ? source.upload_path : `${user.id}/${taskId}.${extension}`;
       try {
-        if (!source) {
+        const confirmed=await client.from('keyword_tasks').select('id').eq('id',taskId).maybeSingle();
+        if(confirmed.error)throw new Error('提交状态暂无法核实；已保留任务号与文件，请稍后用原资料重试。');
+        if (!confirmed.data && !source && !pendingSubmission.uploaded) {
           const contentType = extension === 'csv' ? 'text/csv' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
           const upload = await client.storage.from(config.storageBucket).upload(uploadPath, file, { contentType, upsert: false });
-          if (upload.error) throw upload.error;
+          if (upload.error) {if(upload.error.statusCode==='409'||/already exists|duplicate/i.test(upload.error.message||''))pendingSubmission.uploaded=true;else throw upload.error;}
+          else pendingSubmission.uploaded=true;
         }
-        const inserted = await client.from('keyword_tasks').insert({
+        const inserted = confirmed.data?{error:null}:await client.from('keyword_tasks').insert({
           id: taskId,
           user_id: user.id,
           asin,
@@ -217,9 +240,10 @@
           source_task_id: source?.id || null,
         });
         if (inserted.error) {
-          if (!source) await client.storage.from(config.storageBucket).remove([uploadPath]);
-          throw inserted.error;
+          const check=await client.from('keyword_tasks').select('id').eq('id',taskId).maybeSingle();
+          if(check.error||!check.data)throw new Error('提交结果尚未确认；原文件和任务号已保留，请用相同资料重试，不会重复创建任务。');
         }
+        pendingSubmission=null;savePending();
         form.reset();
         window.KeywordRuleSettings.reset();
         submitting = false;
@@ -230,6 +254,7 @@
       } catch (error) {
         showMessage(submitMessage, humanError(error));
       } finally {
+        savePending();
         submitting = false;
         setButtonBusy(submitButton, false, reuseSource ? '使用原数据生成新报告' : '提交任务', '');
       }

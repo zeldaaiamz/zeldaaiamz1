@@ -11,6 +11,8 @@
   const phaseLabels = {keywords:'分析关键词中',prepare:'整理竞对名单中',awaiting_selection:'待选择／确认竞对',collect:'竞对取数中',awaiting_review:'待确认特征清洗',suggest:'生成清洗建议中',needs_evidence:'系统自动补齐资料',judge:'生成业务档案与特征清单中',complete:'已完成'};
   function taskLabel(task) {
     if (task.status === '失败') return task.status;
+    if(task.status==='已完成'&&task.comparison_phase){const s=task.image_session;return s?.image_status==='complete'?'04 / 05 已完成':s?.status==='error'?'04 完成 · 05 异常':s?.status==='running'||s?.status==='queued'?'04 完成 · 05 分析中':'04 完成 · 05 待继续';}
+    if (task.comparison_phase === 'needs_evidence' && task.comparison_state?.autoEvidenceAttempted) return '自动采集受阻';
     if (task.comparison_phase === 'awaiting_selection') {
       const asins = task.comparison_request?.competitorAsins || task.comparison_state?.competitorAsins || task.comparison_asins || [];
       if (asins.length < 1) return '待选择竞对';
@@ -32,12 +34,13 @@
   const hasEvidence=v=>typeof v==='string'?Boolean(v.trim()):Array.isArray(v)?v.length>0&&v.every(hasEvidence):Boolean(v&&typeof v==='object'&&Object.values(v).some(hasEvidence));
   function evidenceEditor(t,body,app,message,onDone){
     const state=t.comparison_state||{},products=state.products||[];
-    body.append(element('p','系统自动复用已采集资料，并获取对应 ASIN 的公开原文。你无需填写标题、描述、属性或资料来源；没有可靠原文的字段不会编造。'));
+    body.append(element('p',state.autoEvidenceAttempted?'自动采集已结束，尚未取得完整原文，任务已停止等待处理。已采集资料保留，无需手填。':'系统将复用已采集资料，并获取对应 ASIN 的公开原文；没有可靠原文的字段不会编造。'));
     body.append(element('p',`任务编号：${t.id}`));
     if(state.notice)body.append(element('p',/补录|维护人员|填写/.test(state.notice)?'本任务已由后台自动处理原文缺失；成功资料直接复用，无需填写。':state.notice));
+    if(state.health?.reason)body.append(element('p',`检查结果：${state.health.reason}`));
     for(const p of products){
       const section=element('fieldset',undefined,'evidence-product');section.append(element('legend',`${p.role==='own'?'我方':'竞对'} ${p.asin}`));
-      section.append(element('p',p.listingEvidenceComplete?'文字资料已齐全；可选字段未取得不阻止文字对比。':'系统正在处理缺失文字资料，无需手填。'));
+      section.append(element('p',p.listingEvidenceComplete?'文字资料已齐全；可选字段未取得不阻止文字对比。':state.autoEvidenceAttempted?'文字资料缺失，自动采集已停止；已保存资料可展开核对。':'系统将处理缺失文字资料，无需手填。'));
       const detail=element('details');detail.append(element('summary','查看系统已采集资料与来源'),element('pre',JSON.stringify({title:p.title,description:p.description,bullets:p.bullets,attributes:p.attributes,missingFields:p.missingFields,autoEvidence:p.autoEvidence,manualEvidence:p.manualEvidence},null,2)));section.append(detail);body.append(section);
     }
     body.append(element('p','自动补齐优先使用免费公开原文；成功留底不重复取数。继续仍受原任务已批准名单与取数次数约束，不批准新的 AI 判断。图片资料不足时由图片流程单独处理。'));
@@ -68,7 +71,7 @@
         finally { button.disabled = false; }
       };
       if (t.status !== '进行中') { body.append(element('p','任务状态已变化，请关闭后刷新。')); return; }
-      document.getElementById('comparison-review-title').textContent=t.comparison_phase==='needs_evidence'?'系统自动补齐产品资料':'竞对对比 · 待确认';
+      document.getElementById('comparison-review-title').textContent=t.comparison_phase==='needs_evidence'?(t.comparison_state?.autoEvidenceAttempted?'自动采集受阻 · 原因与资料':'系统自动补齐产品资料'):'竞对对比 · 待确认';
       if(t.comparison_phase==='needs_evidence'){evidenceEditor(t,body,app,message,onDone);return;}
       if (t.comparison_phase === 'awaiting_selection') {
         if(t.control_state!=='running'){body.append(element('p','任务已暂停或正在暂停，请先在任务列表重新启动。'));return;}
