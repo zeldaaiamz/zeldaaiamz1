@@ -15,3 +15,9 @@
 *.pem
 *.key
 密钥库.md
+
+# Keep private credentials out of every release
+.env*
+*.pem
+*.key
+密钥库.md
