@@ -1,10 +1,20 @@
 (async function () {
   'use strict';
   const { client, session, el, message, reportPath } = window.VOC;
+  const taskView = window.VOCTaskView;
   const $ = id => document.getElementById(id);
   let budgetSummary=null;
   const money=n=>'¥'+(Number(n||0)/1000000).toFixed(3);
   let productCatalog = {}, tasks = [], lastTaskRender = "", loadedLimit = 50, hasMore = false;
+  let relatedTasks = new Map();
+  const mainTask = task => taskView.mainTask(task, id => tasks.find(t => t.id === id) || relatedTasks.get(id));
+  function reportLink(task) {
+    const main = mainTask(task);
+    if (!main || main.status !== '完成' || !reportPath(main)) return null;
+    const link = el('a', task.duplicate_of ? '打开主报告 →' : '打开报告 →', 'report-link');
+    link.href = `report/?task=${encodeURIComponent(main.id)}`;
+    return link;
+  }
   let asins = [], selected = new Set(), currentSession, busy = false, loading = false, pendingSubmission = null;
   function addInput() {
     const values = $('asin-input').value.toUpperCase().trim().split(/[\s,+]+/).filter(Boolean);
@@ -69,7 +79,7 @@
     const form = new FormData($('submit-form')), count = Number(form.get('review-count')), scope = form.get('review-scope');
     $('submission-summary').textContent = `${selected.size} 个 ASIN · ${scope === 'asin_only' ? '仅本 ASIN' : '含变体评论'} · ${count ? '总目标 '+selected.size*count+' 条' : '请选择采集目标'} · 每任务最多 ¥5 · 每日最多 ¥50；额度内自动处理`;
     const duplicate = duplicateTask(count,scope); $('duplicate-warning').replaceChildren();
-    if (duplicate) { const link = el('button','查看已有任务'); link.type='button'; link.onclick=()=>showDetail(duplicate); $('duplicate-warning').append(el('p','已有相同配置任务；复用主任务及结果，不重复执行或扣费。'),link); }
+    if (duplicate) { const link = el('button','查看已有任务'); link.type='button'; link.onclick=()=>showDetail(duplicate); $('duplicate-warning').append(el('p','已有相同配置任务；复用主任务及结果，不重复执行或扣费。'),link); const report=reportLink(duplicate);if(report)$('duplicate-warning').append(report); }
   }
   function statusOf(task) {
     if(task.duplicate_of)return '复用已有任务';
@@ -81,15 +91,7 @@
     return task.execution_phase || task.status;
   }
   function waitingText(task) {
-    if(task.duplicate_of)return '相同 ASIN、相同配置只执行一次；主任务编号：'+task.duplicate_of.slice(0,8);
-    if(task.control_state==='paused') return '已请求暂停：正在进行的调用可能需完成后停止，留底保留；继续仍受原授权约束。';
-    if(task.waiting_reason) return task.waiting_reason;
-    if(task.status==='排队中'&&budgetSummary&&!budgetSummary.priceVerified)return '等待核实采集的人民币单价；未发起付费调用。';
-    if(task.status==='排队中') return '尚未开始。等待原因未同步，请查看详情；不要重复提交。';
-    if(task.status==='完成'&&!reportPath(task)) return '没有可打开的报告；历史记录未提供结束原因，不能判断是否未取得评论。';
-    if(task.status==='失败') return task.failure_reason || '失败原因未返回';
-    if(task.heartbeat_at && Date.now()-Date.parse(task.heartbeat_at)>120000) return '执行状态超过 2 分钟未更新，请核对执行服务；不能据此判断已失败。';
-    return '';
+    return taskView.waitingText(task, budgetSummary, reportPath(task));
   }
   function date(value) { return value ? new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(value)) : '未返回'; }
   async function manage(task,action,name) {
@@ -100,7 +102,7 @@
     const box=el('div',undefined,'task-actions');
     const add=(text,fn)=>{const b=el('button',text);b.type='button';b.onclick=fn;box.append(b)};
     add('任务详情',()=>showDetail(task));
-    if(task.duplicate_of){const main=tasks.find(t=>t.id===task.duplicate_of);if(main)add('查看主任务',()=>showDetail(main));}
+    if(task.duplicate_of){const main=mainTask(task);if(main)add('查看主任务',()=>showDetail(main));}
     if(!task.duplicate_of&&!['完成','失败'].includes(task.status)) add(task.control_state==='paused'?'继续任务':'暂停任务',()=>manage(task,task.control_state==='paused'?'resume':'pause'));
     if(!task.duplicate_of&&task.status==='失败'&&['采集','标注','归集','生成旅程','生成报告'].includes(task.execution_phase)&&!/评论库未收录/.test(task.failure_reason||''))add('复用留底恢复',()=>manage(task,'recover'));
     add(task.archived?'恢复到列表':'归档',()=>manage(task,task.archived?'restore':'archive'));
@@ -108,23 +110,26 @@
   }
   function showDetail(task) {
     const host=$('task-detail');host.replaceChildren();
-    for(const text of [task.task_name||task.asins,'任务编号：'+task.id,'状态：'+statusOf(task),waitingText(task),'创建：'+date(task.created_at),'记录更新：'+date(task.updated_at),'执行心跳：'+date(task.heartbeat_at),'站点：US；评论范围：'+(task.review_scope==='asin_only'?'仅本 ASIN':'含变体评论'),'采集目标：'+task.reviews_per_asin+' 条 / ASIN；实际采集：'+(task.collected_count??'未返回')+'；已标注：'+task.annotated_count,(budgetSummary?'本任务核算费用（含预占）：'+money(budgetSummary.taskCosts?.[task.duplicate_of||task.id])+'；今日合计：'+money(budgetSummary.dayUsed):'费用数据尚未返回'),
+    const main=mainTask(task),sampleTask=main||task,report=reportLink(task);if(report)host.append(report);
+    for(const text of [task.task_name||task.asins,'任务编号：'+task.id,'状态：'+statusOf(task),task.duplicate_of&&main?'主任务状态：'+statusOf(main):'',waitingText(task),'创建：'+date(task.created_at),'记录更新：'+date(task.updated_at),!task.duplicate_of&&['抓评论','标注中','生成报告'].includes(task.status)?'执行心跳：'+date(task.heartbeat_at):'','站点：US；评论范围：'+(task.review_scope==='asin_only'?'仅本 ASIN':'含变体评论'),'采集目标：'+task.reviews_per_asin+' 条 / ASIN；'+(task.duplicate_of?'主任务样本：':'')+'实际采集：'+(sampleTask.collected_count??'未返回')+'；已标注：'+sampleTask.annotated_count,taskView.feeText(task,budgetSummary,money),
       '费用：每任务上限 ¥5、每日上限 ¥50（北京时间）。额度内自动跑完整流程，超额等待追加授权；结果未知的调用保留预占额度。','恢复说明：复用已有评论和标注留底；调用结果未知时需人工核对，失败任务不会自动重新执行；有明确失败阶段的任务可请求按原授权复用留底恢复。','归档只整理列表，不暂停执行；如需停止后续调用，请先暂停。']) if(text)host.append(el('p',text));
-    for(const item of task.sample_summary?.perAsin||[])host.append(el('p',`${item.requestedAsin}：${item.count} 条；采集结束原因：${item.stopReason||'未返回'}`));
+    for(const item of sampleTask.sample_summary?.perAsin||[])host.append(el('p',`${item.requestedAsin}：${item.count} 条；采集结束原因：${item.stopReason||'未返回'}`));
     const name=el('input');name.value=task.task_name||'';name.maxLength=80;name.setAttribute('aria-label','编辑任务名称');const save=el('button','保存名称');save.type='button';save.onclick=()=>manage(task,'rename',name.value);host.append(name,save,actions(task));
     if(!$('task-dialog').open)$('task-dialog').showModal();
   }
   function taskCard(task) {
+    const main=mainTask(task),sampleTask=main||task;
     const card=el('article',undefined,'task-card');card.dataset.taskId=task.id;card.append(taskThumbnail(task.asins));
     const body=el('div',undefined,'task-body'),heading=el('div',undefined,'task-heading');heading.append(el('strong',task.task_name||task.asins));
-    const kind=task.status==='完成'&&reportPath(task)?'done':task.status==='失败'||task.status==='完成'?'failed':task.status==='排队中'||task.waiting_reason?'queued':'running';heading.append(el('span',statusOf(task),`badge ${kind}`));body.append(heading);
+    const kind=task.duplicate_of?'queued':task.status==='完成'&&reportPath(task)?'done':task.status==='失败'||task.status==='完成'?'failed':task.status==='排队中'||task.waiting_reason?'queued':'running';heading.append(el('span',statusOf(task),`badge ${kind}`));body.append(heading);
     if(task.task_name)body.append(el('p',task.asins));
-    body.append(el('p','编号：'+task.id.slice(0,8)),el('p',`US · ${task.review_scope==='asin_only'?'仅本 ASIN':'含变体评论'} · 每个 ASIN 目标 ${task.reviews_per_asin} 条`),el('p',`实际采集：${task.collected_count??'未返回'} · 已标注：${task.annotated_count} 条`),el('p','创建：'+date(task.created_at)+' · 更新：'+date(task.updated_at)));
-    if(budgetSummary)body.append(el('p','核算费用（含预占）：'+money(budgetSummary.taskCosts?.[task.duplicate_of||task.id])+' / ¥5；今日 '+money(budgetSummary.dayUsed)+' / ¥50'));
+    body.append(el('p','编号：'+task.id.slice(0,8)),el('p',`US · ${task.review_scope==='asin_only'?'仅本 ASIN':'含变体评论'} · 每个 ASIN 目标 ${task.reviews_per_asin} 条`),el('p',(task.duplicate_of?'主任务样本：':'')+`实际采集：${sampleTask.collected_count??'未返回'} · 已标注：${sampleTask.annotated_count} 条`),el('p','创建：'+date(task.created_at)+' · 更新：'+date(task.updated_at)));
+    if(task.duplicate_of&&main)body.append(el('p','主任务状态：'+statusOf(main)));
+    body.append(el('p',taskView.feeText(task,budgetSummary,money)));
     const note=waitingText(task);if(note)body.append(el('p',note,'task-status-note'));
-    if(reportPath(task)&&task.status==='完成'){const link=el('a','打开报告 →','report-link');link.href=`report/?task=${encodeURIComponent(task.id)}`;body.append(link)}
+    const report=reportLink(task);if(report)body.append(report);
     else if(!note&&task.status!=='失败'){const progress=el('progress');progress.max=4;progress.value=Math.max(0,steps.indexOf(task.status));progress.setAttribute('aria-label','执行阶段；不是完成百分比');body.append(progress)}
-    if(task.collected_count!==null&&task.collected_count!==undefined&&task.collected_count<task.reviews_per_asin*task.asins.split('+').length)body.append(el('p','实际样本未达目标，原因见任务详情。'));
+    if(sampleTask.collected_count!==null&&sampleTask.collected_count!==undefined&&sampleTask.collected_count<task.reviews_per_asin*task.asins.split('+').length)body.append(el('p','实际样本未达目标，原因见任务详情。'));
     body.append(actions(task));card.append(body);return card;
   }
   function renderTasks() {
@@ -141,8 +146,10 @@
     try {
       const {data,error}=await client.from('voc_tasks').select('*').order('created_at',{ascending:false}).range(0,loadedLimit-1);if(error)throw error;
       const budget=await client.rpc('voc_budget_summary');if(!budget.error)budgetSummary=budget.data;else budgetSummary=null;
+      const parentIds=[...new Set(data.map(t=>t.duplicate_of).filter(id=>id&&!data.some(t=>t.id===id)))];
+      if(parentIds.length){const parents=await client.from('voc_tasks').select('*').in('id',parentIds);if(parents.error)throw parents.error;relatedTasks=new Map(parents.data.map(t=>[t.id,t]));}else relatedTasks=new Map();
       const next=data;hasMore=data.length===loadedLimit;
-      const signature=JSON.stringify([next,budgetSummary]);tasks=next;if(signature!==lastTaskRender){lastTaskRender=signature;renderTasks();if($('configure-dialog').open)updateSummary()}message($('tasks-error'),'');
+      const signature=JSON.stringify([next,budgetSummary,[...relatedTasks.values()]]);tasks=next;if(signature!==lastTaskRender){lastTaskRender=signature;renderTasks();if($('configure-dialog').open)updateSummary()}message($('tasks-error'),'');
     }catch(e){message($('tasks-error'),'任务列表读取失败，保留上次结果：'+e.message)}finally{loading=false}
   }
   $('asin-input').addEventListener('keydown', event => { if ((event.key === 'Enter' || event.key === ' ') && !event.isComposing) { event.preventDefault(); addInput(); } });

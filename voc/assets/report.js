@@ -8,8 +8,14 @@
     try {
       const id = new URLSearchParams(location.search).get('task');
       if (!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id || '')) throw new Error('任务号无效，请返回任务列表。');
-      const { data: task, error } = await client.from('voc_tasks').select('id,asins,status,report_path,failure_reason,waiting_reason,control_state').eq('id',id).maybeSingle();
-      if (error) throw error; if (!task) throw new Error('找不到任务，或当前账户无权查看。');
+      let task, currentId=id;const seen=new Set();
+      while(true){
+        if(!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(currentId)||seen.has(currentId)||seen.size>=10)throw new Error('复用任务关系无效，请返回任务列表核对。');
+        seen.add(currentId);
+        const {data,error}=await client.from('voc_tasks').select('id,asins,status,report_path,failure_reason,waiting_reason,control_state,duplicate_of').eq('id',currentId).maybeSingle();
+        if(error)throw error;if(!data)throw new Error('找不到任务，或当前账户无权查看。');task=data;
+        if(!task.duplicate_of)break;currentId=task.duplicate_of;
+      }
       document.getElementById('report-title').textContent = task.asins;
       if (task.status === '失败') throw new Error(task.failure_reason || '任务失败');
       if (task.status !== '完成') return message(status,`报告尚未生成。${task.control_state==='paused'?'任务已请求暂停。':task.waiting_reason||'当前阶段：'+task.status} 请返回任务列表查看详情。`);
