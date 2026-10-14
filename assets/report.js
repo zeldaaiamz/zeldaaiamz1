@@ -12,6 +12,7 @@
     if(profileName)profileName.textContent=session.user?.user_metadata?.name||'当前账户';
     if(profileEmail&&session.user?.email){const [name,domain]=session.user.email.split('@');profileEmail.textContent=`${name.slice(0,3)}…@${domain||''}`;}
     const taskId = new URLSearchParams(window.location.search).get('task');
+    if(window.KeywordReportDrafts)window.KeywordReportDrafts.mount({frame:document.querySelector('#report-frame'),taskId,userId:session.user.id});
     const message = document.querySelector('#report-message');
     const loading = document.querySelector('#report-loading');
     const view = document.querySelector('#report-view');
