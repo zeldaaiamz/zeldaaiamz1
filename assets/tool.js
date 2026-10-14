@@ -159,7 +159,7 @@
       try {
         const data=[];
         for(let offset=0;;offset+=100){
-          const batch=await client.from('keyword_tasks').select('id,asin,status,control_state,created_at,processing_ms,processing_run_id,report_url,failure_reason,upload_path,comparison_phase,comparison_request,comparison_asins:comparison_state->competitorAsins,core_keyword,comparison_pricing:comparison_state->pricing,comparison_state').order('created_at',{ascending:false}).order('id',{ascending:false}).range(offset,offset+99);
+          const batch=await client.from('keyword_tasks').select('id,asin,status,control_state,created_at,updated_at,comparison_selection,processing_ms,processing_run_id,report_url,failure_reason,upload_path,comparison_phase,comparison_request,comparison_asins:comparison_state->competitorAsins,core_keyword,comparison_pricing:comparison_state->pricing,comparison_state').order('created_at',{ascending:false}).order('id',{ascending:false}).range(offset,offset+99);
           if(batch.error)throw batch.error;
           data.push(...(batch.data||[]));if((batch.data||[]).length<100)break;
         }
@@ -169,6 +169,7 @@
           if(images.error)throw images.error;
           const byId=new Map((images.data||[]).map(s=>[s.task_id,s]));data.slice(offset,offset+100).forEach(t=>t.image_session=byId.get(t.id)||null);
         }
+        const sources=await client.from('keyword_task_report_sources').select('task_id,upload_path,revision,confirmed_at');if(sources.error)throw sources.error;const sourceMap=new Map((sources.data||[]).map(s=>[s.task_id,s]));data.forEach(t=>t.recovered_source=sourceMap.get(t.id)||null);
         const removed=await client.from('keyword_task_recycle').select('task_id,deleted_at,restored_at');if(removed.error)throw removed.error;const requests=await client.from('keyword_task_help_requests').select('task_id,status,reason');if(requests.error)throw requests.error;management?.update(data,removed.data||[],requests.data||[]);const active=management?management.active():data;
           const buildRow=task=>taskRow(task, async (t,compare) => {
             if(!compare)return selectSource(t);

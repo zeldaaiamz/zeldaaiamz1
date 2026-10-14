@@ -11,7 +11,7 @@
     const profileName=document.querySelector('#workspace-user-name'),profileEmail=document.querySelector('#workspace-user-email');
     if(profileName)profileName.textContent=session.user?.user_metadata?.name||'当前账户';
     if(profileEmail&&session.user?.email){const [name,domain]=session.user.email.split('@');profileEmail.textContent=`${name.slice(0,3)}…@${domain||''}`;}
-    const taskId = new URLSearchParams(window.location.search).get('task');
+    const params=new URLSearchParams(window.location.search);const taskId=params.get('task');const returnURL=window.KeywordNavigation.safeReturn(app,params.get('returnTo'));const back=document.querySelector('#report-history-return');if(returnURL)back.href=returnURL;
     const message = document.querySelector('#report-message');
     const loading = document.querySelector('#report-loading');
     const view = document.querySelector('#report-view');
@@ -25,11 +25,11 @@
     window.addEventListener('message', async (event) => {
       if (event.source !== frame.contentWindow) return;
       if (event.data?.type !== 'keyword-battle-download-source') return;
-      if (!currentTask?.upload_path) return;
+      if (!currentTask) return;const sourcePath=currentTask.recovered_source?.upload_path||currentTask.upload_path;if(!sourcePath)return;
       try {
-        const { data, error } = await client.storage.from(config.storageBucket).download(currentTask.upload_path);
+        const { data, error } = await client.storage.from(config.storageBucket).download(sourcePath);
         if (error) throw error;
-        const extension = currentTask.upload_path.toLowerCase().endsWith('.csv') ? 'csv' : 'xlsx';
+        const extension = sourcePath.toLowerCase().endsWith('.csv') ? 'csv' : 'xlsx';
         const url = URL.createObjectURL(data);
         const link = document.createElement('a');
         link.href = url;
@@ -37,9 +37,7 @@
         link.click();
         window.setTimeout(() => URL.revokeObjectURL(url), 1000);
       } catch (error) {
-        window.alert(error?.message?.toLowerCase().includes('not found')
-          ? '这是一份历史任务，原始上传报表已按旧规则清理，无法恢复。'
-          : `下载原始报表失败：${humanError(error)}`);
+        showMessage(message,/not found|does not exist/i.test(error?.message||'')?'原始广告报表已缺失，请在历史报告中补齐对应 ASIN 的原文件；现有报告仍可查看。':`下载原始报表失败：${humanError(error)}`);message.scrollIntoView({block:'start'});
       }
     });
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(taskId || '')) {
@@ -74,7 +72,7 @@
           .maybeSingle();
         if (error) throw error;
         if (!task) throw new Error('找不到这个任务，或它不属于当前账户');
-        currentTask = task;
+        currentTask = task;try{const source=await client.from('keyword_task_report_sources').select('upload_path,revision').eq('task_id',taskId).maybeSingle();if(source.error)throw source.error;currentTask.recovered_source=source.data;}catch{showMessage(message,'补齐报表记录暂时无法读取，请刷新后再下载原报表。');}
         frame.title = task.comparison_phase ? '竞对与图片对比报告' : '关键词与广告分析报告';
         document.querySelector('#report-title').textContent = `${task.asin} · ${task.comparison_phase ? '竞对与图片对比' : '关键词与广告分析'}`;
         meta.textContent = `提交于 ${formatTime(task.created_at)} · 仅当前登录账户可查看`;
@@ -129,6 +127,7 @@
         const exportDoc=finalDocument;
         window.KeywordReportPerformance.upgradeDocument(exportDoc,taskId);
         const emptyScript=exportDoc.createElement('script');emptyScript.textContent="if(!window.ZeldaReportPerformance)['exportTxt','exportCsv'].forEach(id=>document.getElementById(id)?.addEventListener('click',e=>{const n=document.getElementById('visibleCount');if(n&&n.textContent.startsWith('显示 0 / ')){e.stopImmediatePropagation();n.textContent='当前筛选结果没有可导出的关键词';}},true));";exportDoc.body.append(emptyScript);
+        if(task.comparison_phase&&params.get('module')==='05'){const jump=exportDoc.createElement('script');jump.textContent="document.querySelector('[data-module=\"05\"]')?.click();";exportDoc.body.append(jump);}
         frame.srcdoc='<!doctype html>\n'+exportDoc.documentElement.outerHTML;
         if (unavailable.length) showMessage(message, `报告已加载，但${unavailable.join('、')}模块资源暂时不可用，请刷新页面重试。`);
         loading.hidden = true;

@@ -48,7 +48,7 @@
     const message = document.getElementById('comparison-review-message');
     app.hideMessage(message);
     body.replaceChildren(element('p', '正在加载本任务的确认资料…'));
-    dialog.showModal();
+    window.KeywordDialogFlow.open(dialog);
     document.getElementById('close-comparison').onclick = () => dialog.close();
     try {
       const { data:t, error } = await app.client.from('keyword_tasks').select('id,asin,status,control_state,comparison_phase,comparison_state,comparison_request,comparison_selection').eq('id',task.id).single();

@@ -4,7 +4,7 @@
   const page = document.body.dataset.page;
   const config = window.APP_CONFIG || {};
   const rootUrl = new URL(page === 'auth' ? './' : '../', window.location.href);
-  const release='management-20261014-1';
+  const release='polish-20261014-2';
   const route = (path) => {const target=new URL(path,rootUrl);if(target.origin===location.origin&&/\/(tool|report)\//.test(target.pathname))target.searchParams.set('v',release);return target.href;};
   const client = window.supabase?.createClient?.(config.supabaseUrl, config.supabaseAnonKey, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
