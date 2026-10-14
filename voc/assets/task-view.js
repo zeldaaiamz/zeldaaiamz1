@@ -29,5 +29,48 @@
     const cost = money(budget.taskCosts?.[owner] ?? 0);
     return (task.duplicate_of ? '本记录新增费用 ¥0；主任务核算费用（含预占，仅计一次）：' : '本任务核算费用（含预占）：') + cost + ' / ¥5；今日合计 ' + money(budget.dayUsed) + ' / ¥50';
   }
-  return {mainTask, waitingText, feeText};
+  function shortTitle(title, fallback) {
+    const text = typeof title === 'string' ? title.trim() : '';
+    if (!text) return fallback;
+    const first = text.split(/[,，|｜]/)[0].trim() || text;
+    return first.length > 48 ? first.slice(0, 47) + '…' : first;
+  }
+  function productName(task, catalog) {
+    return task.asins.split('+').map(asin => shortTitle(catalog[asin]?.title, asin)).join(' + ');
+  }
+  function groupedTasks(tasks, lookup, {query = '', filter = 'all', catalog = {}, hasReport} = {}) {
+    const q = query.trim().toLocaleUpperCase(), products = new Map(), owners = new Map();
+    const search = task => !q || [task.asins, task.task_name || '', task.id, ...task.asins.split('+').map(a => catalog[a]?.title || '')].join(' ').toLocaleUpperCase().includes(q);
+    function matches(record, main) {
+      if (filter === 'archived' ? !record.archived : record.archived) return false;
+      if (!search(record)) return false;
+      const t = main || record;
+      if (filter === 'all' || filter === 'archived') return true;
+      if (filter === 'done') return t.status === '完成' && hasReport(t);
+      if (filter === 'failed') return t.status === '失败' || t.status === '完成' && !hasReport(t);
+      if (filter === 'waiting') return !['完成', '失败'].includes(t.status) && (!!t.waiting_reason || t.control_state === 'paused' || t.status === '排队中');
+      return filter === 'running' && !t.waiting_reason && t.control_state !== 'paused' && activeStages.includes(t.status);
+    }
+    for (const task of tasks) {
+      const main = mainTask(task, lookup) || task;
+      if (!matches(task, main)) continue;
+      let owner = owners.get(main.id);
+      if (!owner) {
+        const key = (main.marketplace || 'US') + ':' + main.asins.split('+').sort().join('+');
+        let group = products.get(key);
+        if (!group) {group = {key, asins:main.asins, name:productName(main,catalog), records:[], latest:0}; products.set(key,group);}
+        owner = {main, duplicates:[], mainMatched:false, forceOpen:false, matchedCount:0}; owners.set(main.id,owner); group.records.push(owner);
+      }
+      owner.matchedCount++;
+      if (task.id === main.id) owner.mainMatched = true;
+      else owner.duplicates.push(task);
+    }
+    for (const group of products.values()) for (const owner of group.records) {
+      owner.forceOpen = !!q && !owner.mainMatched && owner.duplicates.length > 0;
+      owner.duplicates.sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at));
+      group.latest = Math.max(group.latest, ...[owner.main,...owner.duplicates].map(t=>Date.parse(t.created_at)||0));
+    }
+    return [...products.values()].sort((a,b)=>b.latest-a.latest);
+  }
+  return {mainTask, waitingText, feeText, shortTitle, productName, groupedTasks};
 }));

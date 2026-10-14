@@ -7,6 +7,7 @@
   const money=n=>'¥'+(Number(n||0)/1000000).toFixed(3);
   let productCatalog = {}, tasks = [], lastTaskRender = "", loadedLimit = 50, hasMore = false;
   let relatedTasks = new Map();
+  const expandedReuse = new Set();
   const mainTask = task => taskView.mainTask(task, id => tasks.find(t => t.id === id) || relatedTasks.get(id));
   function reportLink(task) {
     const main = mainTask(task);
@@ -110,19 +111,19 @@
   }
   function showDetail(task) {
     const host=$('task-detail');host.replaceChildren();
-    const main=mainTask(task),sampleTask=main||task,report=reportLink(task);if(report)host.append(report);
+    const main=mainTask(task),sampleTask=main||task,report=reportLink(task);if(report)host.append(report);host.append(el('p',taskView.productName(task,productCatalog),'task-title'));
     for(const text of [task.task_name||task.asins,'任务编号：'+task.id,'状态：'+statusOf(task),task.duplicate_of&&main?'主任务状态：'+statusOf(main):'',waitingText(task),'创建：'+date(task.created_at),'记录更新：'+date(task.updated_at),!task.duplicate_of&&['抓评论','标注中','生成报告'].includes(task.status)?'执行心跳：'+date(task.heartbeat_at):'','站点：US；评论范围：'+(task.review_scope==='asin_only'?'仅本 ASIN':'含变体评论'),'采集目标：'+task.reviews_per_asin+' 条 / ASIN；'+(task.duplicate_of?'主任务样本：':'')+'实际采集：'+(sampleTask.collected_count??'未返回')+'；已标注：'+sampleTask.annotated_count,taskView.feeText(task,budgetSummary,money),
       '费用：每任务上限 ¥5、每日上限 ¥50（北京时间）。额度内自动跑完整流程，超额等待追加授权；结果未知的调用保留预占额度。','恢复说明：复用已有评论和标注留底；调用结果未知时需人工核对，失败任务不会自动重新执行；有明确失败阶段的任务可请求按原授权复用留底恢复。','归档只整理列表，不暂停执行；如需停止后续调用，请先暂停。']) if(text)host.append(el('p',text));
     for(const item of sampleTask.sample_summary?.perAsin||[])host.append(el('p',`${item.requestedAsin}：${item.count} 条；采集结束原因：${item.stopReason||'未返回'}`));
     const name=el('input');name.value=task.task_name||'';name.maxLength=80;name.setAttribute('aria-label','编辑任务名称');const save=el('button','保存名称');save.type='button';save.onclick=()=>manage(task,'rename',name.value);host.append(name,save,actions(task));
     if(!$('task-dialog').open)$('task-dialog').showModal();
   }
-  function taskCard(task) {
+  function taskCard(task, grouped=false) {
     const main=mainTask(task),sampleTask=main||task;
     const card=el('article',undefined,'task-card');card.dataset.taskId=task.id;card.append(taskThumbnail(task.asins));
-    const body=el('div',undefined,'task-body'),heading=el('div',undefined,'task-heading');heading.append(el('strong',task.task_name||task.asins));
+    const body=el('div',undefined,'task-body'),heading=el('div',undefined,'task-heading');heading.append(el('strong',task.task_name||(grouped?(task.review_scope==='asin_only'?'仅本 ASIN':'含变体评论')+' · 目标 '+task.reviews_per_asin+' 条 / ASIN':taskView.productName(task,productCatalog))));
     const kind=task.duplicate_of?'queued':task.status==='完成'&&reportPath(task)?'done':task.status==='失败'||task.status==='完成'?'failed':task.status==='排队中'||task.waiting_reason?'queued':'running';heading.append(el('span',statusOf(task),`badge ${kind}`));body.append(heading);
-    if(task.task_name)body.append(el('p',task.asins));
+    body.append(el('p',task.asins));
     body.append(el('p','编号：'+task.id.slice(0,8)),el('p',`US · ${task.review_scope==='asin_only'?'仅本 ASIN':'含变体评论'} · 每个 ASIN 目标 ${task.reviews_per_asin} 条`),el('p',(task.duplicate_of?'主任务样本：':'')+`实际采集：${sampleTask.collected_count??'未返回'} · 已标注：${sampleTask.annotated_count} 条`),el('p','创建：'+date(task.created_at)+' · 更新：'+date(task.updated_at)));
     if(task.duplicate_of&&main)body.append(el('p','主任务状态：'+statusOf(main)));
     body.append(el('p',taskView.feeText(task,budgetSummary,money)));
@@ -135,11 +136,30 @@
   function renderTasks() {
     const active=document.activeElement, focusTask=active?.closest('[data-task-id]')?.dataset.taskId, focusLabel=active?.textContent;
     const q=$('task-search').value.trim().toUpperCase(),filter=$('task-filter').value;
-    const list=tasks.filter(t=>(filter==='archived'?t.archived:!t.archived)&&(!q||[t.asins,t.task_name||'',t.id].join(' ').toUpperCase().includes(q))&&(filter==='all'||filter==='archived'||filter==='waiting'&&(t.waiting_reason||t.control_state==='paused'||t.status==='排队中')||filter==='done'&&t.status==='完成'&&reportPath(t)||filter==='failed'&&(t.status==='失败'||t.status==='完成'&&!reportPath(t))||filter==='running'&&!t.waiting_reason&&t.control_state!=='paused'&&['抓评论','标注中','生成报告'].includes(t.status)));
-    $('task-total').textContent=`当前显示 ${list.length} 条；已加载 ${tasks.length} 条任务`;
-    $('task-list').replaceChildren(...(list.length?list.map(taskCard):[el('p',tasks.length?'没有匹配的任务，请调整搜索或筛选。':'还没有分析任务，输入 ASIN 开始。','empty-state')]));
+    const groups=taskView.groupedTasks(tasks,id=>tasks.find(t=>t.id===id)||relatedTasks.get(id),{query:q,filter,catalog:productCatalog,hasReport:reportPath});
+    const records=groups.flatMap(g=>g.records),duplicates=records.reduce((n,r)=>n+r.duplicates.length,0);
+    $('task-total').textContent=`当前 ${groups.length} 组商品 · ${records.length} 条主任务 · ${duplicates} 条复用记录可展开；已加载 ${tasks.length} 条记录`;
+    const productGroups=groups.map(group=>{
+      const section=el('section',undefined,'product-task-group');section.dataset.productGroup=group.key;
+      const header=el('header',undefined,'product-group-heading'),title=el('h2',group.name);title.title=group.asins.split('+').map(a=>productCatalog[a]?.title||a).join(' + ');
+      header.append(title,el('p',group.asins+' · '+group.records.length+' 个任务配置 / 版本'));if(group.asins.split('+').some(a=>!productCatalog[a]?.title))header.append(el('p','未核实的商品名称保留 ASIN；可在任务详情中命名。'));section.append(header);
+      const list=el('div',undefined,'group-task-list');
+      for(const record of group.records){
+        const owner=el('div',undefined,'task-owner');owner.append(taskCard(record.main,true));
+        if(!record.mainMatched)owner.append(el('p','主任务仅作结果关联展示；本次搜索或归档筛选匹配的是复用记录。','reuse-context'));
+        if(record.duplicates.length){
+          const details=el('details',undefined,'reuse-records');details.dataset.reuseGroup=record.main.id;details.open=expandedReuse.has(record.main.id)||record.forceOpen;
+          details.append(el('summary','复用记录（'+record.duplicates.length+' 条）· 每条新增费用 ¥0'));
+          details.addEventListener('toggle',()=>{details.open?expandedReuse.add(record.main.id):expandedReuse.delete(record.main.id)});
+          for(const duplicate of record.duplicates)details.append(taskCard(duplicate));owner.append(details);
+        }
+        list.append(owner);
+      }
+      section.append(list);return section;
+    });
+    $('task-list').replaceChildren(...(groups.length?productGroups:[el('p',tasks.length?'没有匹配的任务，请调整搜索或筛选。':'还没有分析任务，输入 ASIN 开始。','empty-state')]));
     const more=el('button','加载更早任务','outline');more.type='button';more.onclick=()=>{loadedLimit+=50;loadTasks()};if(hasMore)$('task-list').append(more);
-    if(focusTask){const card=[...$('task-list').children].find(c=>c.dataset.taskId===focusTask);const button=card&&[...card.querySelectorAll('button,a')].find(b=>b.textContent===focusLabel);button?.focus({preventScroll:true})}
+    if(focusTask){const card=[...$('task-list').querySelectorAll('[data-task-id]')].find(c=>c.dataset.taskId===focusTask);const button=card&&[...card.querySelectorAll('button,a')].find(b=>b.textContent===focusLabel);button?.focus({preventScroll:true})}
   }
   async function loadTasks(append=false) {
     if(loading||document.hidden)return;loading=true;
