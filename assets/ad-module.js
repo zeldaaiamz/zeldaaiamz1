@@ -1,7 +1,8 @@
 (function () {
   'use strict';
   function upgrade(html) {
-    const report = new DOMParser().parseFromString(html, 'text/html');
+    const shared = typeof html !== 'string';
+ const report = shared ? html : new DOMParser().parseFromString(html, 'text/html');
     const panel = report.querySelector('[data-module-panel="06"]');
     const menu = report.querySelector('[data-module="06"]');
     if (!panel || !menu || !panel.querySelector('.placeholder')) return html;
@@ -15,7 +16,7 @@
     panel.dataset.adModule = 'awaiting-task-data'; menu.classList.remove('upcoming');
     menu.querySelectorAll('small').forEach(el => el.remove());
     const label = report.createElement('small'); label.textContent = '待生成'; menu.append(label);
-    return '<!doctype html>\n'+report.documentElement.outerHTML;
+    return shared ? report : '<!doctype html>\n'+report.documentElement.outerHTML;
   }
   window.KeywordBattleAdModule = Object.freeze({ upgrade });
 }());

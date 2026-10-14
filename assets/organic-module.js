@@ -18,8 +18,11 @@ function organicControls() {
     header.addEventListener('click', sort);
     header.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); sort(); } });
   });
+  const rows = [...body.rows];
+  let sortedKey = '', sortedAscending;
   function apply() {
-    const rows = [...body.rows];
+    const query = search.value.trim().toLowerCase();
+    if (sortedKey !== sortKey || sortedAscending !== ascending) {
     rows.sort((a, b) => {
       const av = a.dataset[sortKey] ?? '', bv = b.dataset[sortKey] ?? '';
       if (av === '') return bv === '' ? 0 : 1;
@@ -27,20 +30,24 @@ function organicControls() {
       const result = ['keyword', 'benchmark'].includes(sortKey) ? av.localeCompare(bv, 'zh-CN', {numeric:true}) : Number(av) - Number(bv);
       return result * (ascending ? 1 : -1);
     });
+    const fragment = document.createDocumentFragment();
+    rows.forEach(row => fragment.append(row)); body.append(fragment);
+    sortedKey = sortKey; sortedAscending = ascending;
+    }
     for (const row of rows) {
-      body.append(row);
       const gap = row.dataset.gap;
       const match = filter.value === 'all' || (filter.value === 'missing' && gap === '' && row.dataset.first !== 'true') || (filter.value === 'first' && row.dataset.first === 'true') ||
         (gap !== '' && ((filter.value === 'behind' && Number(gap) > 0) || (filter.value === 'ahead' && Number(gap) < 0) || (filter.value === 'equal' && Number(gap) === 0)));
-      row.hidden = !(match && row.dataset.keyword.includes(search.value.trim().toLowerCase()));
+      row.hidden = !(match && row.dataset.keyword.includes(query));
     }
     const visible = rows.filter(row => !row.hidden).length;
+    window.ZeldaReportPerformance?.page(body,rows.filter(row=>!row.hidden));
     panel.querySelector('[data-count]').textContent = `显示 ${visible} / ${rows.length} 词`;
     panel.querySelector('[data-empty]').hidden = visible !== 0;
     headers.forEach(header => { const active = header.dataset.sortKey === sortKey; header.setAttribute('aria-sort', active ? (ascending ? 'ascending' : 'descending') : 'none'); header.textContent = header.dataset.label + (active ? (ascending ? ' ↑' : ' ↓') : ' ↕'); });
     button.textContent = headers.find(header => header.dataset.sortKey === sortKey).dataset.label + (ascending ? '升序 ↑' : '降序 ↓');
   }
-  filter.addEventListener('change', apply); search.addEventListener('input', apply);
+  filter.addEventListener('change', apply); let searchTimer; search.addEventListener('input', () => { clearTimeout(searchTimer); searchTimer=setTimeout(apply,150); });
   button.addEventListener('click', () => { ascending = !ascending; apply(); });
   panel.querySelectorAll('img').forEach(img => img.addEventListener('error', () => {
     img.hidden = true; img.nextElementSibling.hidden = false;
@@ -49,7 +56,8 @@ function organicControls() {
 }
 
 function upgrade(html) {
- const report = new DOMParser().parseFromString(html, 'text/html');
+ const shared = typeof html !== 'string';
+ const report = shared ? html : new DOMParser().parseFromString(html, 'text/html');
  const panel = report.querySelector('#organicBenchmark');
  if (!panel) return html;
  const volumes = new Map([...report.querySelectorAll('#reportTable tbody tr')].map(row => [row.querySelector('[data-key="keyword"] strong')?.textContent.trim().toLowerCase() || row.querySelector('[data-key="keyword"]')?.textContent.trim().toLowerCase(), row.querySelector('[data-key="volume"]')?.dataset.sort ?? '']));
@@ -61,14 +69,14 @@ function upgrade(html) {
   const rank = index => { const match = row.children[index].textContent.match(/#(\d+)/); return match ? match[1] : ''; };
   row.dataset.ownRank = rank(2); row.dataset.adRank = rank(3); row.dataset.benchmark = row.children[4].querySelector('code')?.textContent.trim() ?? ''; row.dataset.benchmarkRank = rank(5);
  }
- for (const script of report.querySelectorAll('script')) {
+ if (!report.documentElement.dataset.performanceVersion) for (const script of report.querySelectorAll('script')) {
   if (script.textContent.includes('function organicControls()')) {
    const start = script.textContent.indexOf('(function organicControls()');
    const end = script.textContent.indexOf('})();', start);
    if (start >= 0 && end >= 0) script.textContent = script.textContent.slice(0,start) + '(' + organicControls.toString() + ')();' + script.textContent.slice(end + 5);
   }
  }
- return '<!doctype html>\n' + report.documentElement.outerHTML;
+ return shared ? report : '<!doctype html>\n' + report.documentElement.outerHTML;
 }
 window.KeywordBattleOrganicModule = Object.freeze({upgrade});
 }());

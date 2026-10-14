@@ -1,7 +1,8 @@
 (function () {
   'use strict';
   async function upgrade(html) {
-    const report = new DOMParser().parseFromString(html, 'text/html');
+    const shared = typeof html !== 'string';
+ const report = shared ? html : new DOMParser().parseFromString(html, 'text/html');
     const panel = report.querySelector('[data-module-panel="05"]');
     const menu = report.querySelector('[data-module="05"]');
     if (!panel || !menu || (!panel.querySelector('.placeholder') && panel.dataset.imageModule !== 'design-v1')) return html;
@@ -15,7 +16,7 @@
     menu.classList.remove('upcoming');
     menu.querySelectorAll('small').forEach(el => el.remove());
     const label = report.createElement('small'); label.textContent = '尚未运行'; menu.append(label);
-    return '<!doctype html>\n' + report.documentElement.outerHTML;
+    return shared ? report : '<!doctype html>\n' + report.documentElement.outerHTML;
   }
   window.KeywordBattleImageModule = Object.freeze({ upgrade });
 }());
