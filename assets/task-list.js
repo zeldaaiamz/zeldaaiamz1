@@ -5,7 +5,7 @@ function group(t){
  if(t.status==='已完成')return t.comparison_phase&&t.image_session?.image_status!=='complete'?'partial':'done';
  if(t.status==='失败')return 'failed';
  if(t.control_state==='paused')return 'paused';
- if(t.control_state!=='pausing'&&t.comparison_phase==='needs_evidence'&&t.comparison_state?.autoEvidenceAttempted)return 'blocked';
+ if(t.control_state!=='pausing'&&t.comparison_phase==='needs_evidence'&&(t.comparison_state?.autoEvidenceAttempted||t.comparison_state?.evidenceBlock!=='product'))return 'blocked';
  if(t.control_state!=='pausing'&&['awaiting_selection','awaiting_review'].includes(t.comparison_phase))return 'attention';
  return 'running';
 }

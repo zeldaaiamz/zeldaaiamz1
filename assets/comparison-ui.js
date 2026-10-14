@@ -13,6 +13,7 @@
     if (task.status === '失败') return task.status;
     if(task.status==='已完成'&&task.comparison_phase){const s=task.image_session;return s?.image_status==='complete'?'04 / 05 已完成':s?.status==='error'?'04 完成 · 05 异常':s?.status==='running'||s?.status==='queued'?'04 完成 · 05 分析中':'04 完成 · 05 待继续';}
     if (task.comparison_phase === 'needs_evidence' && task.comparison_state?.autoEvidenceAttempted) return '自动采集受阻';
+    if(task.comparison_phase==='needs_evidence'&&task.comparison_state?.evidenceBlock!=='product')return '资料待补齐';
     if (task.comparison_phase === 'awaiting_selection') {
       const asins = task.comparison_request?.competitorAsins || task.comparison_state?.competitorAsins || task.comparison_asins || [];
       if (asins.length < 1) return '待选择竞对';
@@ -34,6 +35,10 @@
   const hasEvidence=v=>typeof v==='string'?Boolean(v.trim()):Array.isArray(v)?v.length>0&&v.every(hasEvidence):Boolean(v&&typeof v==='object'&&Object.values(v).some(hasEvidence));
   function evidenceEditor(t,body,app,message,onDone){
     const state=t.comparison_state||{},products=state.products||[];
+    if(!state.autoEvidenceAttempted&&state.evidenceBlock!=='product'){body.append(element('p','本任务处于历史资料等待阶段，当前没有可执行的自动补齐步骤。已保存资料保留，后台检查会记录阻塞原因。'));
+      if(state.notice)body.append(element('p',state.notice));
+      if(state.health?.reason)body.append(element('p',state.health.reason));
+      body.append(element('p',`任务编号：${t.id}`));return;}
     body.append(element('p',state.autoEvidenceAttempted?'自动采集已结束，尚未取得完整原文，任务已停止等待处理。已采集资料保留，无需手填。':'系统将复用已采集资料，并获取对应 ASIN 的公开原文；没有可靠原文的字段不会编造。'));
     body.append(element('p',`任务编号：${t.id}`));
     if(state.notice)body.append(element('p',/补录|维护人员|填写/.test(state.notice)?'本任务已由后台自动处理原文缺失；成功资料直接复用，无需填写。':state.notice));
