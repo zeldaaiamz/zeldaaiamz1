@@ -1,6 +1,7 @@
 (async function () {
  'use strict';
  const {client,config,session,message,reportPath}=window.VOC,$=id=>document.getElementById(id),frame=$('report-frame'),status=$('report-message'),api=window.VOCReportContext;
+ let displayToken=0;
  let loading=false,task,versions=[],records=[],context=null,pending=new Set(),dirty=new Set();
  frame.onload=sendContext;
  window.addEventListener('beforeunload',event=>{if(dirty.size||pending.size){event.preventDefault();event.returnValue='';}});
@@ -17,15 +18,18 @@
  });
  function fillVersions(){const select=$('report-version');select.replaceChildren();for(const v of versions){const option=document.createElement('option');option.value=v.id;option.textContent=(v.report_path===task.report_path?'当前版本 · ':'历史留底 · ')+new Date(v.generated_at).toLocaleString('zh-CN');select.append(option);}select.disabled=versions.length<2;}
  async function display(version){
-  if(pending.size){message(status,'处理记录正在保存，请完成后再切换。');return;}context=null;dirty.clear();frame.hidden=true;frame.removeAttribute('srcdoc');
+  if(pending.size){message(status,'处理记录正在保存，请完成后再切换。');return;}const token=++displayToken;context=null;dirty.clear();frame.hidden=true;frame.removeAttribute('srcdoc');$('report-version').disabled=true;$('reload-report').disabled=true;message(status,'正在打开并核验报告留底…');$('report-version-note').textContent='';
+  try{
   const path=version?.report_path||task.report_path;if(version&&!api.versionPath(version,task))throw Error('版本与任务不一致。');
   const {data,error}=await client.storage.from(config.reportBucket).download(path);if(error)throw error;const html=await data.text();
   if(version){const bytes=new TextEncoder().encode(html),digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(b=>b.toString(16).padStart(2,'0')).join('');if(digest!==version.sha256||bytes.length!==Number(version.bytes))throw Error('报告留底校验失败，请返回列表核对。');}
   const payload=html.match(/<script id="report-data" type="application\/json">([\s\S]*?)<\/script>/);let modern=false;if(payload){const p=JSON.parse(payload[1]);if(p.task.id!==task.id)throw Error('报告任务身份不一致。');modern=p.presentation?.version===3;}
+  if(token!==displayToken)return;
   const isCurrent=path===task.report_path;context={nonce:crypto.randomUUID(),taskId:task.id,versionId:version?.id||null,keys:version?.action_keys||[],canSave:!!version&&modern&&isCurrent&&records!==null};
   $('report-version-note').textContent=isCurrent?'当前报告 · 处理记录仅当前账户可见，保存不会发起分析调用。':'历史留底 · 旧版内容仅供追溯，以当前版本为准。原文件只读。';
   // Historical HTML is preserved in storage. Remove only its old duplicate navigation in this view.
   frame.srcdoc=html.replace(/<header class="report-header">[\s\S]*?<\/header>/,'<span id="header-asins" hidden></span>');frame.hidden=false;message(status,records===null?'报告已打开，但处理记录未能读取；刷新后可再核对。':'');
+  }catch(error){if(token===displayToken)throw error;}finally{if(token===displayToken){$('report-version').disabled=versions.length<2;$('reload-report').disabled=false;}}
  }
  async function load(){if(loading)return;loading=true;context=null;
   try{const id=new URLSearchParams(location.search).get('task');if(!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id||''))throw Error('任务号无效，请返回任务列表。');let currentId=id;const seen=new Set();
