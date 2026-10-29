@@ -35,7 +35,7 @@ window.RootFinderCloud={
     const keywordRoot=form.elements.namedItem('root').value.trim(),priceFloor=Number(form.elements.namedItem('floor').value);
     const id=crypto.randomUUID();setBusy(true);showError('');
     try{
-      await api('/api/jobs/start',{id,mode,keywordRoot,priceFloor,country:'US',...(mode==='expand'?{asin:$('#sourceAsin').value.trim().toUpperCase(),weekStart:$('#weekStart').value}:{})});
+      await api('/api/jobs/start',{id,mode,keywordRoot,priceFloor,trafficFloor:Number(form.elements.namedItem('trafficFloor').value),country:'US',...(mode==='expand'?{asin:$('#sourceAsin').value.trim().toUpperCase(),weekStart:$('#weekStart').value}:{})});
       current=await api('/api/history/'+id);switchView('results');this.watch();
     }catch(e){setBusy(false);showError(e.message);}
   },
@@ -50,7 +50,7 @@ window.RootFinderCloud={
       try{health=await api('/api/health');}catch(e){if(e.status!==401)throw e;await this.login();health=await api('/api/health');}
       $('#connectionStatus').textContent='阿里云已连接 · 美国站';await refreshHistory();
       const id=health.activeJob||historyItems[0]?.id;
-      if(id){current=await api('/api/history/'+encodeURIComponent(id));form.elements.namedItem('root').value=current.data.keywordRoot;form.elements.namedItem('floor').value=current.floor;render();if(health.activeJob)this.watch();}
+      if(id){current=await api('/api/history/'+encodeURIComponent(id));form.elements.namedItem('root').value=current.data.keywordRoot;form.elements.namedItem('floor').value=current.floor;form.elements.namedItem('trafficFloor').value=current.trafficFloor||0;render();if(health.activeJob)this.watch();}
     }catch(e){showError('连接失败：'+e.message);$('#connectionStatus').textContent='阿里云暂未连接';}
   }
 };
