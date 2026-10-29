@@ -13,3 +13,5 @@
 .method-tabs{display:flex;gap:8px;flex-wrap:wrap}.method-tabs button{border:1px solid #dce3dc;background:#fff;border-radius:8px;padding:9px 13px;color:#244b3d;cursor:pointer;font:inherit}.method-tabs button[aria-pressed=true]{background:#244b3d;color:#fff;border-color:#244b3d}.method-tabs button[data-method=high_price_anomaly][aria-pressed=true]{background:#a9480b;border-color:#a9480b}
 
 .keyword-translation{font-size:12px;font-weight:400;line-height:1.5;color:#718078;margin-top:3px;letter-spacing:normal}
+
+.favorite-heart{display:inline-block;border:1px solid #d9b8be;border-radius:6px;padding:4px 7px;background:#fff;color:#ab3853;font-size:11px;cursor:pointer}.favorite-heart[aria-pressed=true]{background:#fff0f3;color:#ba2448;border-color:#d7768e}.favorite-heart:disabled{opacity:.5}#favoriteNotice{position:fixed;bottom:18px;right:18px;max-width:400px;padding:12px 16px;background:#fff5f7;border:1px solid #d9b8be;border-radius:10px;z-index:100;box-shadow:0 4px 20px #0002;font-size:13px}#favoriteNotice a{color:#ab3853}
