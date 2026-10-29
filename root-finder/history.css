@@ -7,3 +7,5 @@
 @media(min-width:1001px){#searchForm .fields{grid-template-columns:minmax(150px,1.3fr) repeat(3,minmax(110px,1fr)) minmax(90px,.6fr);align-items:end}#searchForm .submit{grid-column:1/-1}}
 
 .product-thumb{position:relative;display:block;width:72px;height:72px;background:#fff;border:1px solid #edf0eb;border-radius:6px;overflow:hidden;margin:5px 0}.product-thumb span{position:absolute;inset:0;display:grid;place-items:center;font-size:10px;color:#8a938c}.product-thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#fff}.product{min-width:0}
+
+.product.price-anomaly{border:2px solid #d97822;background:#fff6e9}.price-anomaly .price{color:#a9480b}.anomaly-label{display:inline-block;padding:2px 6px;margin:4px 0;border-radius:4px;color:#91400c;background:#ffe2bc;font-size:10px;font-weight:700}
