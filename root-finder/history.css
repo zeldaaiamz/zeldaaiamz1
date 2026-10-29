@@ -11,3 +11,5 @@
 .product.price-anomaly{border:2px solid #d97822;background:#fff6e9}.price-anomaly .price{color:#a9480b}.anomaly-label{display:inline-block;padding:2px 6px;margin:4px 0;border-radius:4px;color:#91400c;background:#ffe2bc;font-size:10px;font-weight:700}
 
 .method-tabs{display:flex;gap:8px;flex-wrap:wrap}.method-tabs button{border:1px solid #dce3dc;background:#fff;border-radius:8px;padding:9px 13px;color:#244b3d;cursor:pointer;font:inherit}.method-tabs button[aria-pressed=true]{background:#244b3d;color:#fff;border-color:#244b3d}.method-tabs button[data-method=high_price_anomaly][aria-pressed=true]{background:#a9480b;border-color:#a9480b}
+
+.keyword-translation{font-size:12px;font-weight:400;line-height:1.5;color:#718078;margin-top:3px;letter-spacing:normal}
