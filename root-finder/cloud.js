@@ -42,7 +42,7 @@ window.RootFinderCloud={
   async resume(){if(!current||busy)return;try{await api('/api/jobs/start',{id:current.id});setBusy(true);showError('');this.watch();}catch(e){showError(e.message);}},
   async pause(){try{await api('/api/jobs/pause',{id:current.id});$('#pause').disabled=true;$('#pause').textContent='服务器完成当前词后暂停…';}catch(e){showError(e.message);}},
   async init(){
-    document.querySelector('#scanPanel .notice').textContent='查询由阿里云后台执行，关闭页面或换电脑后仍继续。重新登录可查看历史和进度，每词最多 2 次商品接口调用。';
+    document.querySelector('#scanPanel .notice').textContent='查询由阿里云后台执行，关闭页面或换电脑后仍继续。重新登录可恢复最近结果和进度，每词最多 2 次商品接口调用。';
     document.querySelector('#connectionStatus').textContent='正在连接阿里云…';
     try{
       if(!this.token)await this.login();
@@ -51,6 +51,7 @@ window.RootFinderCloud={
       $('#connectionStatus').textContent='阿里云已连接 · 美国站';await refreshSavedLanes();await refreshHistory();
       const id=health.activeJob||historyItems[0]?.id;
       if(id){current=await api('/api/history/'+encodeURIComponent(id));form.elements.namedItem('root').value=current.data.keywordRoot;form.elements.namedItem('floor').value=current.floor;form.elements.namedItem('trafficFloor').value=current.trafficFloor||0;form.elements.namedItem('anomalyPercent').value=current.anomalyPercent??50;render();if(health.activeJob)this.watch();}
+      scheduleHistoryHint();
     }catch(e){showError('连接失败：'+e.message);$('#connectionStatus').textContent='阿里云暂未连接';}
   }
 };
