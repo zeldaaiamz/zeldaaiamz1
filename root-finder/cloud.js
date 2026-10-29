@@ -48,7 +48,7 @@ window.RootFinderCloud={
       if(!this.token)await this.login();
       let health;
       try{health=await api('/api/health');}catch(e){if(e.status!==401)throw e;await this.login();health=await api('/api/health');}
-      $('#connectionStatus').textContent='阿里云已连接 · 美国站';await refreshHistory();
+      $('#connectionStatus').textContent='阿里云已连接 · 美国站';await refreshSavedLanes();await refreshHistory();
       const id=health.activeJob||historyItems[0]?.id;
       if(id){current=await api('/api/history/'+encodeURIComponent(id));form.elements.namedItem('root').value=current.data.keywordRoot;form.elements.namedItem('floor').value=current.floor;form.elements.namedItem('trafficFloor').value=current.trafficFloor||0;render();if(health.activeJob)this.watch();}
     }catch(e){showError('连接失败：'+e.message);$('#connectionStatus').textContent='阿里云暂未连接';}
