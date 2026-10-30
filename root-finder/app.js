@@ -14,8 +14,12 @@ function screeningRaw(row,floor,traffic=0,anomaly=null){
  if(ps.length!==10||!ps.every(hasPrice))return result;
  result.priceFloor=ps.every(p=>p.price>floor);
  if(anomaly!=null)ps.forEach((p,i)=>{const average=ps.reduce((sum,q,j)=>sum+(j===i?0:q.price),0)/9,uplift=(p.price/average-1)*100;if(uplift+1e-9>=anomaly){const quality=assessQuality(ps,i,anomaly),key={confirmed:'anomalies',pending:'pendingAnomalies',excluded:'excludedAnomalies'}[quality.status];result[key].push({asin:p.asin,price:p.price,otherAverage:average,upliftPercent:uplift,...quality});}});
+ applyReviewRules(result,ps);
  return result;
 }
+const REVIEW_LIMIT=500,HIGH_PRICE_REVIEW_REASON='高价商品评价均>500，不入选',TOP10_REVIEW_REASON='前10个产品评价均>500，竞争大，不入选';
+function reviewCount(p){const raw=p?.ratingCount;if(raw==null||raw===''||typeof raw==='boolean')return null;const n=typeof raw==='number'?raw:Number(String(raw).replace(/,/g,'').trim());return Number.isFinite(n)&&n>=0?n:null;}
+function applyReviewRules(result,ps){const high=p=>{const n=reviewCount(p);return n!=null&&n>REVIEW_LIMIT;},byAsin=new Map(ps.map(p=>[p.asin,p]));const move=reason=>{result.excludedAnomalies.push(...result.anomalies.map(a=>({...a,status:'excluded',reason})));result.anomalies=[];};if(ps.length===10&&ps.every(high)){result.reviewExcluded=TOP10_REVIEW_REASON;move(TOP10_REVIEW_REASON);result.priceFloor=false;result.lowCompetition=false;}else if(result.anomalies.length&&result.anomalies.every(a=>high(byAsin.get(a.asin)))){result.anomalyReviewExcluded=HIGH_PRICE_REVIEW_REASON;move(HIGH_PRICE_REVIEW_REASON);}}
 const screeningCache=new WeakMap();
 function screening(row,floor,traffic=0,anomaly=null){const key=JSON.stringify([floor,traffic,anomaly,row.queried,row.error,row.weeklySearchVolume]),old=screeningCache.get(row);if(old&&old.key===key&&old.products===row.products)return old.result;const result=screeningRaw(row,floor,traffic,anomaly);screeningCache.set(row,{key,products:row.products,result});return result;}
 function rowRecord(row){return row._source||current;}
