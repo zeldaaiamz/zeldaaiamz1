@@ -1,5 +1,5 @@
 /* Share the main site's Supabase session; never store a separate password. */
-window.RootFinderAuth = (() => {
+window.RootFinderSession = (() => {
   const local = ['localhost', '127.0.0.1'].includes(location.hostname);
   const config = window.APP_CONFIG;
   const client = local ? null : window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);

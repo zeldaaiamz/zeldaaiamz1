@@ -9,9 +9,9 @@ const imageObserver=new IntersectionObserver(entries=>entries.forEach(({target,i
 function observeImages(){imageObserver.disconnect();document.querySelectorAll('img[data-src]').forEach(img=>{if(!img.closest('details')||img.closest('details').open)imageObserver.observe(img);});}
 document.addEventListener('toggle',e=>{if(e.target.matches?.('details'))observeImages();},true);
 document.addEventListener('error',e=>{if(e.target.matches?.('.product-thumb img'))e.target.remove();},true);
-async function request(path,body){if(cloud)token=await window.RootFinderAuth.getAccessToken();const r=await fetch(base+path,{method:body===undefined?'GET':'POST',headers:{...(body===undefined?{}:{'Content-Type':'application/json'}),...(cloud&&token?{Authorization:'Bearer '+token}:{})},body:body===undefined?undefined:JSON.stringify(body)});const data=await r.json();if(!r.ok){const e=new Error(data.error||'请求失败');e.status=r.status;throw e;}return data;}
+async function request(path,body){if(cloud)token=await window.RootFinderSession.getAccessToken();const r=await fetch(base+path,{method:body===undefined?'GET':'POST',headers:{...(body===undefined?{}:{'Content-Type':'application/json'}),...(cloud&&token?{Authorization:'Bearer '+token}:{})},body:body===undefined?undefined:JSON.stringify(body)});const data=await r.json();if(!r.ok){const e=new Error(data.error||'请求失败');e.status=r.status;throw e;}return data;}
 async function api(path,body){try{return await request(path,body);}catch(e){if(cloud&&e.status===401){await login();return request(path,body);}throw e;}}
-async function login(){token=await window.RootFinderAuth.getAccessToken();}
+async function login(){token=await window.RootFinderSession.getAccessToken();}
 function announce(text,undoId){const box=$('#notice');box.replaceChildren(document.createTextNode(text));if(undoId){const button=document.createElement('button');button.textContent='撤销删除';button.onclick=async()=>{button.disabled=true;try{await api('/api/curation/undo',{undoId});await refresh();announce('已恢复赛道');}catch(e){$('#error').textContent=e.message;button.disabled=false;}};box.append(button);}}
 function filteredItems(){
  const q=$('#search').value.trim().toLowerCase(),method=$('#method').value;

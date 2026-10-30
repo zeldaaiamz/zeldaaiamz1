@@ -47,7 +47,7 @@ form.elements.namedItem('root').addEventListener('input',scheduleHistoryHint);
 form.elements.namedItem('root').addEventListener('focus',scheduleHistoryHint);
 function showError(message){errorBox.textContent=message;errorBox.hidden=!message;}
 async function api(path,body){
-  if(window.RootFinderCloud?.enabled)window.RootFinderCloud.token=await window.RootFinderAuth.getAccessToken();
+  if(window.RootFinderCloud?.enabled)window.RootFinderCloud.token=await window.RootFinderSession.getAccessToken();
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),300000);
   try{const r=await fetch(apiBase+path,{method:body===undefined?'GET':'POST',headers:{...(body===undefined?{}:{'Content-Type':'application/json'}),...(window.RootFinderCloud?.enabled&&window.RootFinderCloud.token?{Authorization:'Bearer '+window.RootFinderCloud.token}:{})},body:body===undefined?undefined:JSON.stringify(body),signal:controller.signal});const data=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(data.error||`服务返回 ${r.status}`);e.status=r.status;throw e;}return data;}
   catch(e){if(e.name==='AbortError')throw new Error('本次请求等待超过 5 分钟。已停止自动查询，稍后可继续；上游可能已消耗配额。');throw e;}
