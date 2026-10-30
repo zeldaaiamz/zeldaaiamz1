@@ -18,40 +18,35 @@ window.RootFinderCloud={
       };
     });
   },
-  async poll(){
-    if(!current)return;
+  snapshot:null,polling:false,adding:false,
+  async poll(force=false){
+    if(this.polling||(!force&&curationBusy))return;this.polling=true;
     try{
-      current=await api('/api/history/'+encodeURIComponent(current.id));
-      const running=['running','discovering'].includes(current.status);
-      setBusy(running);requestName=current.currentKeyword?'服务器正在核价：'+current.currentKeyword:running?'服务器正在拓词':'';requestStarted=Date.parse(current.requestStartedAt||current.updatedAt);
-      $('#saveStatus').textContent='已保存到阿里云 · '+dateText(current.updatedAt);
-      render();await refreshHistory();if(current.error)showError(current.error);
-      if(!running)clearInterval(this.timer);
-    }catch(e){showError('暂时无法读取进度，服务器任务可能仍在运行：'+e.message);}
+      const state=await api('/api/jobs/state');const revision=JSON.stringify([state.activeJob,state.paused,state.jobs.map(j=>[j.id,j.updatedAt,j.queuePosition])]);if(!force&&revision===this.revision)return;this.revision=revision;this.snapshot=state;
+      const rows=state.records.flatMap(record=>record.data.opportunities.map(row=>({...row,_source:{id:record.id,createdAt:record.createdAt,floor:record.floor,trafficFloor:record.trafficFloor,anomalyPercent:record.anomalyPercent,market:record.market,data:{keywordRoot:record.data.keywordRoot}}})));
+      current={id:'all-results',floor:0,trafficFloor:0,anomalyPercent:null,market:'US',status:state.activeJob?'running':'complete',data:{keywordRoot:'全部任务',opportunities:rows}};
+      setBusy(!!state.activeJob||(!state.paused&&state.jobs.some(j=>j.queuePosition)));render();this.renderQueue();
+    }catch(e){showError('读取队列失败，云端任务可能仍在执行：'+e.message);}finally{this.polling=false;}
   },
+  renderQueue(){const state=this.snapshot;if(!state)return;$('#queuePanel').hidden=false;$('#queueStatus').textContent=state.paused?'队列已暂停':state.activeJob?'队列执行中':state.jobs.some(j=>j.queuePosition)?'等待启动下一个任务':'队列空闲';$('#queuePause').disabled=state.paused;$('#queueResume').disabled=!state.paused||!!state.activeJob;$('#queueJobs').innerHTML=state.jobs.map(j=>`<div class="queue-job"><div><strong>${esc(j.keywordRoot)}</strong> · ${esc(states[j.status]||j.status)}${j.queuePosition?' · 队列第 '+j.queuePosition+' 项':''}<small>底价 ${money(j.floor)} · 流量 ≥ ${j.trafficFloor||0} · 异常 ≥ ${j.anomalyPercent??'未设置'}% · 已处理 ${j.checked+j.skipped}/${j.count} · ${esc(dateText(j.createdAt))}</small>${j.error?`<small>${esc(j.error)}</small>`:''}</div><div>${j.queuePosition&&j.id!==state.activeJob?`<button class="small-button" data-cancel-job="${esc(j.id)}">移出队列</button>`:!j.queuePosition&&['paused','error','interrupted','cancelled'].includes(j.status)?`<button class="small-button" data-retry-job="${esc(j.id)}">加入队列继续</button>`:''}</div></div>`).join('')||'<p>暂无任务。输入关键词后加入队列。</p>';},
   watch(){clearInterval(this.timer);this.timer=setInterval(()=>this.poll(),4000);this.poll();},
   async start(mode){
-    if(busy||!form.reportValidity()||(mode==='expand'&&!$('#expandForm').reportValidity()))return;
-    const keywordRoot=form.elements.namedItem('root').value.trim(),priceFloor=Number(form.elements.namedItem('floor').value);
-    const id=crypto.randomUUID();setBusy(true);showError('');
-    try{
-      await api('/api/jobs/start',{id,mode,keywordRoot,priceFloor,anomalyPercent:Number(form.elements.namedItem('anomalyPercent').value),trafficFloor:Number(form.elements.namedItem('trafficFloor').value),country:'US',...(mode==='expand'?{asin:$('#sourceAsin').value.trim().toUpperCase(),weekStart:$('#weekStart').value}:{})});
-      current=await api('/api/history/'+id);switchView('results');this.watch();
-    }catch(e){setBusy(false);showError(e.message);}
+    if(this.adding||curationBusy||!form.reportValidity()||(mode==='expand'&&!$('#expandForm').reportValidity()))return;
+    const keywordRoot=form.elements.namedItem('root').value.trim(),priceFloor=Number(form.elements.namedItem('floor').value),id=crypto.randomUUID();
+    this.adding=true;$('#submit').disabled=true;showError('');
+    try{await api('/api/jobs/start',{id,mode,keywordRoot,priceFloor,anomalyPercent:Number(form.elements.namedItem('anomalyPercent').value),trafficFloor:Number(form.elements.namedItem('trafficFloor').value),country:'US',...(mode==='expand'?{asin:$('#sourceAsin').value.trim().toUpperCase(),weekStart:$('#weekStart').value}:{})});await this.poll(true);$('#queueStatus').textContent+=' · 已加入 '+keywordRoot;scheduleHistoryHint();}catch(e){showError(e.message);}finally{this.adding=false;$('#submit').disabled=false;}
   },
-  async resume(){if(!current||busy)return;try{await api('/api/jobs/start',{id:current.id});setBusy(true);showError('');this.watch();}catch(e){showError(e.message);}},
-  async pause(){try{await api('/api/jobs/pause',{id:current.id});$('#pause').disabled=true;$('#pause').textContent='服务器完成当前词后暂停…';}catch(e){showError(e.message);}},
+  async resume(){try{await api('/api/jobs/resume-queue',{});await this.poll(true);}catch(e){showError(e.message);}},
+  async pause(){try{await api('/api/jobs/pause',{});await this.poll(true);}catch(e){showError(e.message);}},
   async init(){
-    document.querySelector('#scanPanel .notice').textContent='查询由阿里云后台执行，关闭页面或换电脑后仍继续。重新登录可恢复最近结果和进度，每词最多 2 次商品接口调用。';
-    document.querySelector('#connectionStatus').textContent='正在连接阿里云…';
+    $('#connectionStatus').textContent='正在连接阿里云…';
     try{
       if(!this.token)await this.login();
-      let health;
-      try{health=await api('/api/health');}catch(e){if(e.status!==401)throw e;await this.login();health=await api('/api/health');}
-      $('#connectionStatus').textContent='阿里云已连接 · 美国站';await refreshSavedLanes();await refreshHistory();
-      const id=health.activeJob||historyItems[0]?.id;
-      if(id){current=await api('/api/history/'+encodeURIComponent(id));form.elements.namedItem('root').value=current.data.keywordRoot;form.elements.namedItem('floor').value=current.floor;form.elements.namedItem('trafficFloor').value=current.trafficFloor||0;form.elements.namedItem('anomalyPercent').value=current.anomalyPercent??50;render();if(health.activeJob)this.watch();}
-      scheduleHistoryHint();
+      try{await api('/api/health');}catch(e){if(e.status!==401)throw e;await this.login();await api('/api/health');}
+      $('#connectionStatus').textContent='阿里云已连接 · 美国站';await refreshSavedLanes();
+      $('#queuePause').onclick=()=>this.pause();$('#queueResume').onclick=()=>this.resume();
+      $('#queueJobs').onclick=async e=>{const cancel=e.target.closest('[data-cancel-job]'),retry=e.target.closest('[data-retry-job]');if(!cancel&&!retry)return;const b=cancel||retry;b.disabled=true;try{await api(cancel?'/api/jobs/cancel':'/api/jobs/start',{id:cancel?b.dataset.cancelJob:b.dataset.retryJob});await this.poll(true);}catch(err){showError(err.message);}finally{b.disabled=false;}};
+      await this.poll(true);this.watch();scheduleHistoryHint();
     }catch(e){showError('连接失败：'+e.message);$('#connectionStatus').textContent='阿里云暂未连接';}
   }
 };

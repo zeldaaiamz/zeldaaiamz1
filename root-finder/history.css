@@ -23,3 +23,5 @@
 .lane.low-review-lane{border:2px solid #c93838;background:#fff5f5;box-shadow:0 0 0 1px #c9383812}.low-review-lane .lane-head{border-bottom-color:#f0bcbc}.low-review-warning{display:inline-block;background:#ffe0e0;color:#a51e1e;border:1px solid #e9aaaa;border-radius:6px;font-size:11px;padding:5px 8px;font-weight:700}
 
 .result-bulk{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin:18px 0;color:#52635a}.result-bulk label,.result-pick{display:flex;align-items:center;gap:10px}.result-bulk input,.result-pick input{width:19px;height:19px;accent-color:#244b3d}.result-pick{cursor:pointer}
+
+.queue-controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.queue-job{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #e5e9e4}.queue-job small,.result-source{display:block;color:#718078;font-size:11px}.queue-job progress{width:130px}#queueJobs{max-height:320px;overflow:auto}.result-source{margin-top:5px}
