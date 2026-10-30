@@ -28,6 +28,7 @@
           <option value="./" selected>关键词作战台</option>
           <option value="../voc/">用户洞察VOC</option>
           <option value="https://zeldaaiamz.github.io/etsy-analyzer/#">选品雷达</option>
+          <option value="https://zeldaaiamz.github.io/zeldaaiamz1/root-finder/">sif选赛道</option>
         </select>
         <svg aria-hidden="true" viewBox="0 0 20 20"><path d="m5 7 5 5 5-5"/></svg>
       </div>
@@ -110,6 +111,7 @@
   </style>
   <script>
     document.getElementById('tool-switcher').addEventListener('change', function () {
+      if (this.value === 'https://zeldaaiamz.github.io/zeldaaiamz1/root-finder/') window.location.assign(this.value);
       if (this.value === '../voc/') window.location.assign('../voc/');
       if (this.value === 'https://zeldaaiamz.github.io/etsy-analyzer/#') window.location.assign(this.value);
     });
