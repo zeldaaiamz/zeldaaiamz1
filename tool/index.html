@@ -111,9 +111,11 @@
   </style>
   <script>
     document.getElementById('tool-switcher').addEventListener('change', function () {
-      if (this.value === 'https://zeldaaiamz.github.io/zeldaaiamz1/root-finder/') window.location.assign(this.value);
-      if (this.value === '../voc/') window.location.assign('../voc/');
-      if (this.value === 'https://zeldaaiamz.github.io/etsy-analyzer/#') window.location.assign(this.value);
+      const target = this.value;
+      this.value = './';
+      if (['../voc/', 'https://zeldaaiamz.github.io/etsy-analyzer/#', 'https://zeldaaiamz.github.io/zeldaaiamz1/root-finder/'].includes(target)) {
+        window.open(target, '_blank', 'noopener,noreferrer');
+      }
     });
     window.addEventListener('pageshow', function () { document.getElementById('tool-switcher').value = './'; });
   </script>
