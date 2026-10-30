@@ -23,7 +23,7 @@ const yp=(rc,d,n=10)=>[...Array(n)].map((_,i)=>({asin:'Y'+i,ratingCount:rc,first
 const eq=(a,b,n)=>{if(JSON.stringify(a)!==JSON.stringify(b))throw Error(n+' '+JSON.stringify(a));};
 eq(youngMarketReasons(yp(199,null),NOW),['前10评论均<200'],'rc199');eq(youngMarketReasons(yp(200,null),NOW),[],'rc200');
 eq(youngMarketReasons(yp(900,'2025-10-30'),NOW),['前10均为近12个月上架'],'date edge');eq(youngMarketReasons(yp(900,'2025-10-29'),NOW),[],'date old');
-const ym=yp(5,'2026-01-01');ym[2].ratingCount=null;ym[3].firstAvailableDate='';eq(youngMarketReasons(ym,NOW),[],'missing');
+const ym=yp(5,'2026-01-01');ym[2].ratingCount=null;ym[3].firstAvailableDate='';eq(youngMarketReasons(ym,NOW),['前10评论均<200','前10均为近12个月上架'],'missing skipped');const ym2=yp(5,'2026-01-01');ym2[0].ratingCount=900;ym2[1].firstAvailableDate=null;eq(youngMarketReasons(ym2,NOW),['前10均为近12个月上架'],'missing skipped but rest judged');eq(youngMarketReasons(yp(null,null),NOW),[],'all missing');
 eq(youngMarketReasons(yp(5,'2026-01-01',9),NOW),[],'9 items');
 t('young selects w/o price rule',{queried:true,products:yp(5,null).map(p=>({...p,price:1}))},r=>r.youngMarket.length===1&&!r.priceFloor);
 t('young needs traffic',{queried:true,weeklySearchVolume:1,products:yp(5,null).map(p=>({...p,price:9}))},r=>r);
