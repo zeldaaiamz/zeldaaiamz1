@@ -3,7 +3,7 @@ window.RootFinderCloud={
   enabled: !['127.0.0.1','localhost'].includes(location.hostname),
   token: '',
   timer:null,
-  async login(){this.token=await window.RootFinderAuth.token();},
+  async login(){this.token=await window.RootFinderAuth.getAccessToken();},
   snapshot:null,polling:false,adding:false,
   async poll(force=false){
     if(this.polling||(!force&&curationBusy))return;this.polling=true;
