@@ -2,7 +2,7 @@
 const fs=require('fs'),path=require('path'),dir=path.join(__dirname,'..');
 const a=fs.readFileSync(path.join(dir,'app.js'),'utf8');
 const grab=n=>{const i=a.indexOf('function '+n+'(');let d=0;for(let k=a.indexOf('{',i);;k++){if(a[k]=='{')d++;if(a[k]=='}'&&--d==0)return a.slice(i,k+1);}};
-eval(fs.readFileSync(path.join(dir,'quality.js'),'utf8').split('\n').slice(0,6).join('\n')+';'+a.match(/const hasPrice=[^\n;]*;/)[0]+grab('screeningRaw')+';'+a.match(/const REVIEW_LIMIT[^\n]*/)[0]+';'+grab('reviewCount')+';'+grab('applyReviewRules')+';globalThis.S=screeningRaw');
+eval(fs.readFileSync(path.join(dir,'quality.js'),'utf8').split('\n').slice(0,6).join('\n')+';'+a.match(/const hasPrice=[^\n;]*;/)[0]+grab('screeningRaw')+';'+a.match(/const REVIEW_LIMIT[^\n]*?;const oldListing=[^\n]*?;};/)[0]+';'+grab('reviewCount')+';'+grab('applyReviewRules')+';globalThis.S=screeningRaw');
 const row=(rc,hi,hr)=>({queried:true,products:[...Array(10)].map((_,i)=>({asin:'A'+i,price:hi.includes(i)?100:10,title:'Notebook 2 Pack 8.5 x 11 inch',monthlyPurchases:'100+',ratingCount:hi.includes(i)?hr[hi.indexOf(i)]:rc}))});
 const t=(name,r,f)=>{const m=S(r,5,0,50);if(!f(m))throw Error(name+' '+JSON.stringify(m));};
 t('single>500',row(10,[0],[600]),r=>!r.anomalies.length&&r.anomalyReviewExcluded&&r.priceFloor);
@@ -12,4 +12,9 @@ t('multi mixed',row(10,[0,1],[600,300]),r=>r.anomalies.length==2);
 t('missing reviews',row(10,[0],[null]),r=>r.anomalies.length==1);
 t('top10 all>500',row(900,[],[]),r=>r.reviewExcluded&&!r.priceFloor);
 t('lowcomp untouched',{queried:true,products:[{asin:'x',price:9,ratingCount:9999}]},r=>r.lowCompetition&&!r.reviewExcluded);
+const dated=ds=>({queried:true,products:ds.map((d,i)=>({asin:'D'+i,price:i?10:100,title:'Notebook 2 Pack 8.5 x 11 inch',monthlyPurchases:'100+',ratingCount:10,firstAvailableDate:d}))});
+t('top10 all<2022',dated(Array(10).fill('2021-12-31')),r=>r.reviewExcluded==='前10个产品上架时间均早于2022年，不入选'&&!r.priceFloor&&!r.anomalies.length);
+t('one 2022',dated([...Array(9).fill('2019-05-01'),'2022-01-01']),r=>!r.reviewExcluded&&r.priceFloor);
+t('missing date',dated([...Array(9).fill('2019-05-01'),null]),r=>!r.reviewExcluded);
+t('9 old not 10',dated(Array(9).fill('2019-05-01')),r=>!r.reviewExcluded);
 console.log('review rules ok');
