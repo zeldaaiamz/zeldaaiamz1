@@ -9,7 +9,7 @@ const imageObserver=new IntersectionObserver(entries=>entries.forEach(({target,i
 function observeImages(){imageObserver.disconnect();document.querySelectorAll('img[data-src]').forEach(img=>{if(!img.closest('details')||img.closest('details').open)imageObserver.observe(img);});}
 document.addEventListener('toggle',e=>{if(e.target.matches?.('details'))observeImages();},true);
 document.addEventListener('error',e=>{if(e.target.matches?.('.product-thumb img'))e.target.remove();},true);
-async function request(path,body){if(cloud)token=await window.RootFinderSession.getAccessToken();const r=await fetch(base+path,{method:body===undefined?'GET':'POST',headers:{...(body===undefined?{}:{'Content-Type':'application/json'}),...(cloud&&token?{Authorization:'Bearer '+token}:{})},body:body===undefined?undefined:JSON.stringify(body)});const data=await r.json();if(!r.ok){const e=new Error(data.error||'请求失败');e.status=r.status;throw e;}return data;}
+async function request(path,body){return window.RootFinderFetch.request(base,path,body,cloud?async()=>(token=await window.RootFinderSession.getAccessToken()):null);}
 async function api(path,body){try{return await request(path,body);}catch(e){if(cloud&&e.status===401){await login();return request(path,body);}throw e;}}
 async function login(){token=await window.RootFinderSession.getAccessToken();}
 function announce(text,undoId){const box=$('#notice');box.replaceChildren(document.createTextNode(text));if(undoId){const button=document.createElement('button');button.textContent='撤销删除';button.onclick=async()=>{button.disabled=true;try{await api('/api/curation/undo',{undoId});await refresh();announce('已恢复赛道');}catch(e){$('#error').textContent=e.message;button.disabled=false;}};box.append(button);}}
@@ -31,11 +31,11 @@ function render(){
 }
 async function refresh(){await window.FavoriteUI.refresh(api);items=(await api('/api/lanes')).items;const selected=$('#method').value,methods=new Map();items.forEach(x=>x.filters.filter(f=>['price_floor','high_price_anomaly','low_competition'].includes(f.type)).forEach(f=>methods.set(f.type,f.label)));$('#method').innerHTML='<option value="">全部筛选方法</option>'+Array.from(methods).map(([key,label])=>`<option value="${esc(key)}">${esc(label)}</option>`).join('');if(methods.has(selected))$('#method').value=selected;render();}
 $('#topics').onclick=e=>{const b=e.target.closest('[data-topic]');if(!b)return;selectedIds.clear();topic=b.dataset.topic;history.replaceState(null,'',topic?'?topic='+encodeURIComponent(topic):location.pathname);render();};
-$('#search').oninput=()=>{selectedIds.clear();render();};$('#method').onchange=()=>{selectedIds.clear();render();};$('#refresh').onclick=()=>refresh().catch(e=>$('#error').textContent=e.message);
+$('#search').oninput=()=>{selectedIds.clear();render();};$('#method').onchange=()=>{selectedIds.clear();render();};$('#refresh').onclick=()=>refresh().then(()=>{$('#error').textContent='';}).catch(e=>window.RootFinderFetch.showError($('#error'),'读取失败：',e,refresh));
 $('#lanes').oninput=e=>{if(e.target.dataset.note){drafts.set(e.target.dataset.note,e.target.value);$('#state-'+e.target.dataset.note).textContent='有未保存的备注';}};
 $('#lanes').onclick=async e=>{const b=e.target.closest('[data-delete],[data-save]');if(!b)return;b.disabled=true;$('#error').textContent='';try{if(b.dataset.delete){const out=await api('/api/lanes/delete',{id:b.dataset.delete});drafts.delete(b.dataset.delete);await refresh();announce('已从赛道库删除。查询历史中的原始结果仍保留。',out.undoId);}else{const id=b.dataset.save,note=$('#note-'+id).value;await api('/api/lanes/note',{id,note});const item=items.find(x=>x.id===id);item.note=note;item.updatedAt=new Date().toISOString();if($('#note-'+id).value===note)drafts.delete(id);$('#state-'+id).textContent=drafts.has(id)?'有未保存的备注':'备注已保存';}}catch(e){$('#error').textContent=e.message;}finally{b.disabled=false;}};
 window.addEventListener('beforeunload',e=>{if(drafts.size){e.preventDefault();e.returnValue='';}});
-refresh().catch(e=>$('#error').textContent='读取失败：'+e.message);
+$('#error').textContent='正在读取…';refresh().then(()=>{$('#error').textContent='';}).catch(e=>window.RootFinderFetch.showError($('#error'),'读取失败：',e,refresh));
 
 $('#selectAll').onchange=e=>{selectedIds=new Set(e.target.checked?filteredItems().map(x=>x.id):[]);render();};
 $('#lanes').onchange=e=>{const id=e.target.dataset.select;if(!id)return;if(e.target.checked)selectedIds.add(id);else selectedIds.delete(id);updateSelection();};
