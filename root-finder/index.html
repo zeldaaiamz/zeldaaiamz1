@@ -10,7 +10,7 @@
   </style>
   <link rel="stylesheet" href="history.css?v=queue-1">
 </head>
-<body>
+<body><a href="../tool/" style="display:inline-block;margin:16px 24px">← 总工作台</a>
   <main class="shell">
     <header class="topbar"><div class="brand"><div class="mark">↗</div><span>ROOT FINDER <span style="color:#91a197;font-weight:500">/ 选品雷达</span></span></div><a class="small-button" href="favorites.html">♡ 潜力单品</a><a class="small-button" href="library.html">赛道库 ↗</a><div class="top-note"><i class="dot"></i> <span id="connectionStatus">正在检查本地配置…</span></div></header>
     <section class="hero"><div class="eyebrow">PRODUCT DISCOVERY · POWERED BY SIF</div><h1>从一个词根，找到<br><span>值得研究的赛道。</span></h1><p>拓展以词根开头的关键词，逐个检查流量靠前的商品价格，一次取数，同时发现高于底价和高价异常的细分赛道。</p></section>
@@ -33,9 +33,9 @@
     <p class="notice"><b>筛选口径：</b>以 SIF 返回的关键词流量排序及各关键词对应的前 10 个产品为准；满足流量底线，且前 10 个价格全部高于底价，或至少一个价格比其余 9 个均价高出设定幅度即可入选。高价异常还须同一商品近一个月购买量 ≥50，且包装数量校正后单价仍异常。至少 3 个同类型同尺寸商品用于比较；缺少购买量、数量或可比规格时待核实，不计入已确认异常。新增低竞争规则：满足流量底线且成功返回 1–9 个商品时独立入选并标红，不要求满足价格规则；返回 0 个或查询失败不入选。低竞争仅表示本次 SIF 返回的商品不足 10 个，不代表全市场商品总数。价格为接口返回时点的商品价格，可能因变体、促销和站点变化而变动。</p>
     <footer><span class="footer-mark">ROOT FINDER</span><span>词根拓展选品 · 数据由 SIF 提供</span></footer>
   </main>
-  <dialog id="loginDialog"><form id="loginForm"><h2>登录词根选品</h2><p>查询与历史记录保存在阿里云。登录后此浏览器会记住登录状态，请输入专用登录密码。</p><label for="loginPassword">登录密码</label><input id="loginPassword" class="control" type="password" autocomplete="current-password" required><p id="loginError" role="alert"></p><button id="loginSubmit" class="submit">登录</button></form></dialog>
-  <script src="api-config.js?v=remember-20261030"></script><script src="favorite-ui.js?v=queue-1"></script>
-  <script src="cloud.js?v=remember-20261030"></script>
-  <script src="quality.js?v=queue-1"></script><script src="app.js?v=queue-1"></script>
+  
+  <script src="../assets/vendor/supabase.js"></script><script src="../assets/config.js"></script><script src="site-auth.js?v=sso-1"></script><script src="api-config.js"></script><script src="favorite-ui.js?v=queue-1"></script>
+  <script src="cloud.js?v=sso-1"></script>
+  <script src="quality.js?v=queue-1"></script><script src="app.js?v=sso-1"></script>
 </body>
 </html>

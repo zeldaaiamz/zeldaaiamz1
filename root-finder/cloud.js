@@ -1,24 +1,9 @@
 'use strict';
 window.RootFinderCloud={
   enabled: !['127.0.0.1','localhost'].includes(location.hostname),
-  token: window.RootFinderAuth.get(),
+  token: '',
   timer:null,
-  async login(){
-    this.token='';window.RootFinderAuth.clear();
-    const dialog=document.querySelector('#loginDialog');
-    dialog.showModal();
-    return new Promise(resolve=>{
-      document.querySelector('#loginForm').onsubmit=async e=>{
-        e.preventDefault();const button=document.querySelector('#loginSubmit');button.disabled=true;
-        try{
-          const r=await fetch(apiBase+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:document.querySelector('#loginPassword').value})});
-          const data=await r.json();if(!r.ok)throw new Error(data.error||'登录失败');
-          this.token=data.token;window.RootFinderAuth.set(data.token);document.querySelector('#loginPassword').value='';dialog.close();resolve();
-        }catch(e){document.querySelector('#loginError').textContent=e.message==='Failed to fetch'?'无法连接阿里云服务，请稍后重试。':e.message;}
-        finally{button.disabled=false;}
-      };
-    });
-  },
+  async login(){this.token=await window.RootFinderAuth.token();},
   snapshot:null,polling:false,adding:false,
   async poll(force=false){
     if(this.polling||(!force&&curationBusy))return;this.polling=true;
