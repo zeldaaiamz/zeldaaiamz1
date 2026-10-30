@@ -209,6 +209,24 @@
     } catch (e) { message($('submit-error'),`提交未确认：${e.message}。可重试，相同配置会复用任务号防止重复提交。`); }
     finally { busy = false; $('start-analysis').disabled = false; $('start-analysis').textContent = '提交并自动分析'; }
   };
-  try { currentSession = await session(); if (!currentSession) return; $('workspace').hidden = false; $('account-name').textContent = currentSession.user.email || '已登录'; await loadProductCatalog(); await loadTasks(); setInterval(()=>loadTasks(), 2000); }
+  // 由「潜力单品」VOC 分析按钮打开：?asin=XXXXXXXXXX&market=US&auto=1&t=<一次性编号>
+  // 读取后立即从地址栏移除参数（刷新不会重复触发）；同一编号只处理一次；已有相同配置任务时只展示，不重复提交。
+  async function autoStartFromLink() {
+    const params = new URLSearchParams(location.search);
+    if (params.get('auto') !== '1') return;
+    const asin = (params.get('asin') || '').toUpperCase().trim(), market = (params.get('market') || 'US').toUpperCase(), nonce = params.get('t') || '';
+    const clean = new URL(location.href); ['asin','market','auto','t'].forEach(k => clean.searchParams.delete(k)); history.replaceState(null, '', clean);
+    if (!/^[A-Z0-9]{10}$/.test(asin)) return message($('page-message'), '来自潜力单品的 ASIN 无效，未自动分析。');
+    if (market !== 'US') return message($('page-message'), `VOC 目前只支持美国站，${market} 站商品 ${asin} 未自动分析。`);
+    const key = 'voc-auto-' + nonce;
+    try { if (!/^[A-Za-z0-9-]{8,64}$/.test(nonce) || localStorage.getItem(key)) return message($('page-message'), `${asin} 的自动分析链接已处理过，未重复提交。`); localStorage.setItem(key, String(Date.now())); } catch { return message($('page-message'), '浏览器存储不可用，为防重复提交未自动分析，请手动点击「配置分析」。'); }
+    asins = [asin]; renderTags(); openDialog();
+    const preset = $('submit-form').querySelector('input[name="review-count"][value="100"]'); if (preset) preset.checked = true; updateSummary();
+    const duplicate = duplicateTask(100, 'include_variants');
+    if (duplicate) { message($('page-message'), `${asin} 已有相同配置任务，未重复提交；可在弹窗中查看已有任务或报告。`); return; }
+    message($('page-message'), `已从潜力单品接收 ${asin}（美国站），按默认配置（100 条 / 含变体）自动提交分析…`);
+    $('submit-form').requestSubmit();
+  }
+  try { currentSession = await session(); if (!currentSession) return; $('workspace').hidden = false; $('account-name').textContent = currentSession.user.email || '已登录'; await loadProductCatalog(); await loadTasks(); setInterval(()=>loadTasks(), 2000); await autoStartFromLink(); }
   catch (e) { message($('boot-error'), `加载失败：${e.message}`); }
 }());
