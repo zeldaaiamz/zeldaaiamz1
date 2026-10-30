@@ -9,3 +9,5 @@
 .keyword-translation{font-size:12px;font-weight:400;line-height:1.5;color:#718078;margin-top:3px;letter-spacing:normal}
 
 .favorite-heart{display:inline-block;border:1px solid #d9b8be;border-radius:6px;padding:4px 7px;background:#fff;color:#ab3853;font-size:11px;cursor:pointer}.favorite-heart[aria-pressed=true]{background:#fff0f3;color:#ba2448;border-color:#d7768e}.favorite-heart:disabled{opacity:.5}#favoriteNotice{position:fixed;bottom:18px;right:18px;max-width:400px;padding:12px 16px;background:#fff5f7;border:1px solid #d9b8be;border-radius:10px;z-index:100;box-shadow:0 4px 20px #0002;font-size:13px}#favoriteNotice a{color:#ab3853}
+
+.lane.low-competition-lane{border:2px solid #c93838;background:#fff5f5}.low-competition-lane .tag{color:#a51e1e}
