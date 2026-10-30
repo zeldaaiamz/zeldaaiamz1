@@ -3,7 +3,7 @@ const $=s=>document.querySelector(s), form=$('#searchForm'), results=$('#results
 const apiBase=String(window.ROOT_FINDER_API_BASE||'').replace(/\/+$/,'');
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=n=>Number.isFinite(n)?new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(n):'—';
-const dateText=s=>s?new Date(s).toLocaleString('zh-CN'):'时间未记录';
+const dateText=s=>s?new Date(s).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'时间未记录';
 const hasPrice=p=>typeof p?.price==='number'&&Number.isFinite(p.price)&&p.price>0;
 function thumbnail(p){let url='';try{const u=new URL(p.imageUrl||'');if(u.protocol==='https:'&&(u.hostname==='m.media-amazon.com'||u.hostname.endsWith('.ssl-images-amazon.com')))url=u.href;}catch(_){}return `<a class="product-thumb" href="https://www.amazon.com/dp/${encodeURIComponent(p.asin)}" target="_blank" rel="noopener" aria-label="查看 ${esc(p.asin)} 商品"><span>暂无图片</span>${url?`<img src="${esc(url)}" alt="${esc(p.title||p.asin)}" loading="lazy" decoding="async" width="72" height="72">`:''}</a>`;}
 document.addEventListener('error',e=>{if(e.target.matches?.('.product-thumb img'))e.target.remove();},true);
@@ -41,7 +41,7 @@ let historyHintMatched=false,historyHintTimer=null,historyHintSequence=0;
 function scheduleHistoryHint(){
  clearTimeout(historyHintTimer);const sequence=++historyHintSequence,keyword=form.elements.namedItem('root').value.trim();historyHintMatched=false;$('#rootHistoryHint').textContent='';if(!busy)$('#submit').textContent=window.RootFinderCloud?.enabled?'加入查询队列':'开始查询并筛选';
  if(keyword.length<2||keyword.length>80)return;
- historyHintTimer=setTimeout(async()=>{try{const info=await api('/api/keyword-history?market=US&keyword='+encodeURIComponent(keyword));if(sequence!==historyHintSequence)return;historyHintMatched=info.queried;$('#rootHistoryHint').textContent=info.queried?dateText(info.queriedAt)+' · 已经查询过':'';if(!busy)$('#submit').textContent=window.RootFinderCloud?.enabled?'加入查询队列':info.queried?'再次查询并筛选':'开始查询并筛选';}catch(_){if(sequence===historyHintSequence)$('#rootHistoryHint').textContent='历史提示暂不可用，仍可查询';}},350);
+ historyHintTimer=setTimeout(async()=>{try{const info=await api('/api/keyword-history?market=US&keyword='+encodeURIComponent(keyword));if(sequence!==historyHintSequence)return;historyHintMatched=info.queried;if(window.RootFinderCloud)window.RootFinderCloud.lastQueriedAt=info.queriedAt;$('#rootHistoryHint').textContent=info.queried?'这个词在 '+dateText(info.queriedAt)+'（北京时间）已经查过':'';if(!busy)$('#submit').textContent=window.RootFinderCloud?.enabled?'加入查询队列':info.queried?'再次查询并筛选':'开始查询并筛选';}catch(_){if(sequence===historyHintSequence)$('#rootHistoryHint').textContent='历史提示暂不可用，仍可查询';}},350);
 }
 form.elements.namedItem('root').addEventListener('input',scheduleHistoryHint);
 form.elements.namedItem('root').addEventListener('focus',scheduleHistoryHint);
