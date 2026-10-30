@@ -17,3 +17,5 @@
 .favorite-heart{display:inline-block;border:1px solid #d9b8be;border-radius:6px;padding:4px 7px;background:#fff;color:#ab3853;font-size:11px;cursor:pointer}.favorite-heart[aria-pressed=true]{background:#fff0f3;color:#ba2448;border-color:#d7768e}.favorite-heart:disabled{opacity:.5}#favoriteNotice{position:fixed;bottom:18px;right:18px;max-width:400px;padding:12px 16px;background:#fff5f7;border:1px solid #d9b8be;border-radius:10px;z-index:100;box-shadow:0 4px 20px #0002;font-size:13px}#favoriteNotice a{color:#ab3853}
 
 .root-input-wrap{position:relative}.root-input-wrap .root-input{height:68px;padding-bottom:24px}.root-history-hint{position:absolute;left:13px;right:8px;bottom:6px;font-size:10px;font-weight:400;color:#a05e24;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+
+.product-facts{font-size:11px;line-height:1.65;color:#62746a;margin:5px 0}
