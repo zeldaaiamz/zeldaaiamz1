@@ -22,7 +22,7 @@
         <div class="field"><label for="anomalyPercent">高价异常幅度（%）</label><input class="control" id="anomalyPercent" name="anomalyPercent" type="number" value="50" min="0.01" max="10000" step="0.01" required></div><div class="field"><label for="market">站点</label><select class="control" id="market" name="market"><option value="US">美国 · US</option></select></div>
         <button id="submit" class="submit" type="submit">开始查询并筛选 <span aria-hidden="true">↗</span></button>
       </div>
-      <div class="subline"><span>当前 SIF 词根匹配范围：词根开头 · 每个词检查流量前 10 个产品</span><strong>三种筛选规则满足任意一种即入选 · 共用流量底线（0 不限制）</strong></div>
+      <div class="subline" style="justify-content:flex-start"><button id="abaNext" type="button" class="small-button" hidden title="从 ABA 词根库领取 5 个未发放词根，按上方条件加入查询队列">领取下一批 ABA 词根</button></div><div class="subline"><span>当前 SIF 词根匹配范围：词根开头 · 每个词检查流量前 10 个产品</span><strong>三种筛选规则满足任意一种即入选 · 共用流量底线（0 不限制）</strong></div>
     </form>
 
     <details class="search-card" style="margin-top:14px"><summary style="cursor:pointer">补充包含匹配：从相关 ASIN 找词根不在开头的关键词</summary><form id="expandForm" style="margin-top:12px"><div class="fields"><div class="field"><label for="sourceAsin">相关商品 ASIN</label><input class="control" id="sourceAsin" placeholder="输入相关商品 ASIN" required pattern="[A-Za-z0-9]{10}"></div><div class="field"><label for="weekStart">统计周起始日（周日）</label><input class="control" id="weekStart" type="date" required></div><button class="submit" type="submit">包含匹配拓词</button></div><p class="notice">使用上方词根、底价与流量底线。此包含匹配接口当前未提供周搜索量，设置流量底线后，缺少流量的词不会入选。仅查询该 ASIN 的观测词，每次 1 次业务调用，最多 200 条；不代表全市场全部词。</p></form></details>
@@ -35,7 +35,7 @@
   </main>
   
   <script src="../assets/vendor/supabase.js"></script><script src="../assets/config.js"></script><script src="workspace-session.js?v=sso-3"></script><script src="api-config.js"></script><script src="favorite-ui.js?v=queue-1"></script>
-  <script src="cloud.js?v=sso-3"></script>
+  <script src="cloud.js?v=aba-1"></script>
   <script src="quality.js?v=queue-1"></script><script src="app.js?v=sso-3"></script>
 </body>
 </html>

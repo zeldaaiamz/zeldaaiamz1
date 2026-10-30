@@ -22,6 +22,18 @@ window.RootFinderCloud={
     this.adding=true;$('#submit').disabled=true;showError('');
     try{await api('/api/jobs/start',{id,mode,keywordRoot,priceFloor,anomalyPercent:Number(form.elements.namedItem('anomalyPercent').value),trafficFloor:Number(form.elements.namedItem('trafficFloor').value),country:'US',...(mode==='expand'?{asin:$('#sourceAsin').value.trim().toUpperCase(),weekStart:$('#weekStart').value}:{})});await this.poll(true);$('#queueStatus').textContent+=' · 已加入 '+keywordRoot;scheduleHistoryHint();}catch(e){showError(e.message);}finally{this.adding=false;$('#submit').disabled=false;}
   },
+  async abaNext(){
+    if(this.adding||curationBusy)return;const btn=$('#abaNext');
+    if(!form.elements.namedItem('floor').reportValidity()||!form.elements.namedItem('trafficFloor').reportValidity()||!form.elements.namedItem('anomalyPercent').reportValidity())return;
+    if(!confirm('领取下一批 ABA 词根（5 个）并按当前底价/流量/异常条件加入查询队列？领取后不会重复发放。'))return;
+    this.adding=true;btn.disabled=true;showError('');
+    try{const body=await api('/api/aba/next-batch',{});const roots=(body.roots||[]).map(r=>String(r.root||'').trim()).filter(r=>r.length>=2&&r.length<=80);
+      if(!roots.length){$('#queueStatus').textContent+=' · ABA 词根已全部领取';return;}
+      const priceFloor=Number(form.elements.namedItem('floor').value),anomalyPercent=Number(form.elements.namedItem('anomalyPercent').value),trafficFloor=Number(form.elements.namedItem('trafficFloor').value);
+      for(const keywordRoot of roots)await api('/api/jobs/start',{id:crypto.randomUUID(),mode:'discover',keywordRoot,priceFloor,anomalyPercent,trafficFloor,country:'US'});
+      await this.poll(true);$('#queueStatus').textContent+=' · 已加入 ABA 词根：'+roots.join('、');scheduleHistoryHint();
+    }catch(e){showError('领取 ABA 词根失败：'+e.message);}finally{this.adding=false;btn.disabled=false;}
+  },
   async resume(){try{await api('/api/jobs/resume-queue',{});await this.poll(true);}catch(e){showError(e.message);}},
   async pause(){try{await api('/api/jobs/pause',{});await this.poll(true);}catch(e){showError(e.message);}},
   async init(){
@@ -30,7 +42,7 @@ window.RootFinderCloud={
       if(!this.token)await this.login();
       try{await api('/api/health');}catch(e){if(e.status!==401)throw e;await this.login();await api('/api/health');}
       $('#connectionStatus').textContent='阿里云已连接 · 美国站';await refreshSavedLanes();
-      $('#queuePause').onclick=()=>this.pause();$('#queueResume').onclick=()=>this.resume();
+      $('#abaNext').hidden=false;$('#abaNext').onclick=()=>this.abaNext();$('#queuePause').onclick=()=>this.pause();$('#queueResume').onclick=()=>this.resume();
       $('#queueJobs').onclick=async e=>{const cancel=e.target.closest('[data-cancel-job]'),retry=e.target.closest('[data-retry-job]');if(!cancel&&!retry)return;const b=cancel||retry;b.disabled=true;try{await api(cancel?'/api/jobs/cancel':'/api/jobs/start',{id:cancel?b.dataset.cancelJob:b.dataset.retryJob});await this.poll(true);}catch(err){showError(err.message);}finally{b.disabled=false;}};
       await this.poll(true);this.watch();scheduleHistoryHint();
     }catch(e){showError('连接失败：'+e.message);$('#connectionStatus').textContent='阿里云暂未连接';}
