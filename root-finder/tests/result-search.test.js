@@ -2,7 +2,7 @@
 const fs=require('fs'),path=require('path'),a=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
 const grab=n=>{const i=a.indexOf('function '+n+'(');if(i<0)throw Error('missing '+n);let d=0;for(let k=a.indexOf('{',i);;k++){if(a[k]=='{')d++;if(a[k]=='}'&&--d==0)return a.slice(i,k+1);}};
 const els={};const $=s=>els[s]||(els[s]={value:'',textContent:'',checked:false,indeterminate:false,disabled:false});
-let current={id:'r1',data:{keywordRoot:'Squishy'}},busy=false,curationBusy=false,selectionContext='',selectedResults=new Set();
+let current={id:'r1',data:{keywordRoot:'Squishy'}},busy=false,curationBusy=false,deletingKeys=new Set(),selectionContext='',selectedResults=new Set();
 const M={a:{youngMarket:['x'],priceFloor:false,lowCompetition:false,anomalies:[]},b:{youngMarket:[],priceFloor:true,lowCompetition:false,anomalies:[]}};
 const rowMatch=r=>M[r.kind],resultKey=r=>r.keyword,window={};
 eval([grab('rowRecord'),grab('methodMatch'),grab('resultSearchMatch'),grab('delBlocked'),grab('syncResultSelection')].join('\n'));
