@@ -8,7 +8,10 @@ window.RootFinderCloud={
   async poll(force=false){
     if(this.polling||(!force&&curationBusy))return;this.polling=true;
     try{
-      const state=await api('/api/jobs/state');const revision=JSON.stringify([state.activeJob,state.paused,state.jobs.map(j=>[j.id,j.updatedAt,j.queuePosition])]);if(!force&&revision===this.revision)return;this.revision=revision;this.snapshot=state;
+      let state=await api('/api/jobs/state');const revision=JSON.stringify([state.activeJob,state.paused,state.jobs.map(j=>[j.id,j.updatedAt,j.queuePosition])]);if(!force&&revision===this.revision)return;this.revision=revision;
+      // Keep optimistic deletes stable until the API finishes; a stale poll must not resurrect them.
+      const gone=this.deletingKeys;if(gone&&gone.size){state={...state,records:state.records.map(rec=>({...rec,data:{...rec.data,opportunities:(rec.data.opportunities||[]).filter(r=>!gone.has(JSON.stringify([rec.id,r.keyword])))}})).filter(rec=>(rec.data.opportunities||[]).length>0)};}
+      this.snapshot=state;
       const rows=state.records.flatMap(record=>record.data.opportunities.map(row=>({...row,_source:{id:record.id,createdAt:record.createdAt,floor:record.floor,trafficFloor:record.trafficFloor,anomalyPercent:record.anomalyPercent,market:record.market,data:{keywordRoot:record.data.keywordRoot}}})));
       current={id:'all-results',floor:0,trafficFloor:0,anomalyPercent:null,market:'US',status:state.activeJob?'running':'complete',data:{keywordRoot:'全部任务',opportunities:rows}};
       setBusy(!!state.activeJob||(!state.paused&&state.jobs.some(j=>j.queuePosition)));render();this.renderQueue();
