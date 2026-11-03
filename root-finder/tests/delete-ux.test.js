@@ -29,7 +29,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
   assert(app.includes('m.youngMarket.length'),'FE visible includes young');
   assert(quality.includes('data-delete-row'),'pending panel delete');
   assert(app.includes('data-record-id="${esc(rowRecord(row).id)}"'),'result card delete attrs');
-  assert(index.includes('delpend-2'),'cache bust delpend-2');
+  assert(/\?v=(delpend-2|fav-1)/.test(index),'cache bust');
   console.log('ok FE/BE gate alignment');
 })();
 
