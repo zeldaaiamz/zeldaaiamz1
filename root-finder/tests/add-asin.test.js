@@ -1,0 +1,23 @@
+// node root-finder/tests/add-asin.test.js  (frontend parse/render checks for 新增单品)
+'use strict';
+const fs=require('fs'),path=require('path'),assert=require('assert');
+const src=fs.readFileSync(path.join(__dirname,'..','favorites.js'),'utf8');
+const html=fs.readFileSync(path.join(__dirname,'..','favorites.html'),'utf8');
+const grab=n=>src.match(new RegExp('function '+n+'\\([^]*?\\n'))[0];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=n=>typeof n==='number'?'$'+n.toFixed(2):'价格缺失';
+const day=()=>'2026/11/3',ASIN_RE=/^[A-Z0-9]{10}$/;
+const f=new Function('esc','money','day','ASIN_RE',grab('parseAsin')+grab('tags')+grab('sourceLine')+'return {parseAsin,tags,sourceLine};')(esc,money,day,ASIN_RE);
+assert.equal(f.parseAsin(' b0ck439q8y '),'B0CK439Q8Y');
+assert.equal(f.parseAsin('https://www.amazon.com/x/dp/B0CK439Q8Y?th=1'),'B0CK439Q8Y');
+assert.equal(f.parseAsin('https://www.amazon.com/gp/product/B0CK439Q8Y/'),'B0CK439Q8Y');
+for(const bad of ['','B0CK439Q8','B0CK439Q8Y1','B0CK-39Q8Y','<img>'])assert.equal(f.parseAsin(bad),'');
+assert.match(f.tags({market:'US',sources:[{manual:true}]}),/手动添加 · US/);
+assert.doesNotMatch(f.tags({market:'US',sources:[{manual:true}]}),/高价异常/);
+assert.match(f.tags({market:'US',sources:[{manual:true},{keyword:'k',evidence:{}}]}),/高价异常[^]*手动添加/);
+assert.match(f.sourceLine({manual:true,price:14,addedAt:'x'}),/添加时价格 \$14\.00/);
+assert.match(f.sourceLine({keyword:'k',evidence:{price:2,otherAverage:1,upliftPercent:100}}),/高出 100\.00%/);
+assert.doesNotMatch(f.sourceLine({keyword:'<b>',evidence:null}),/<b>|高出/);
+for(const id of ['addForm','addAsin','addMarket','addBtn','addError','addStatus'])assert.ok(html.includes(`id="${id}"`),id);
+assert.ok(html.includes('favorites.js?v=add-asin-1'));
+console.log('add-asin frontend ok');
