@@ -10,9 +10,9 @@ window.RootFinderCloud={
   async poll(force=false){
     if(this.polling||(!force&&curationBusy))return;this.polling=true;
     try{
-      const seq=window.rfDeleteGuard?window.rfDeleteGuard.next():0;let state=await api('/api/jobs/state');const aiSig=JSON.stringify(state.aiVerify?[state.aiVerify.counts,state.aiVerify.keywords,state.aiVerify.asins]:null),aiChanged=aiSig!==this.aiSig;this.ai=state.aiVerify||null;this.aiSig=aiSig;if(aiChanged)window.rfAiOptimistic={};
+      const seq=window.rfDeleteGuard?window.rfDeleteGuard.next():0;let state=await api('/api/jobs/state');const aiSig=JSON.stringify([state.aiVerify?[state.aiVerify.counts,state.aiVerify.keywords,state.aiVerify.asins]:null,state.salesFill?[state.salesFill.counts,state.salesFill.state&&state.salesFill.state.paused,state.salesFill.asins]:null]),aiChanged=aiSig!==this.aiSig;this.ai=state.aiVerify||null;this.salesFill=state.salesFill||null;this.aiSig=aiSig;if(aiChanged)window.rfAiOptimistic={};
       // New Doubao verdicts (aiVerify.version) re-screen rows, so they are part of the revision; queue-only changes just repaint the 待核实 section.
-      const revision=JSON.stringify([state.activeJob,state.paused,state.jobs.map(j=>[j.id,j.updatedAt,j.queuePosition]),state.aiVerify?.version]);if(!force&&revision===this.revision){if(aiChanged&&current&&typeof renderQualityPending==='function')renderQualityPending();return;}this.revision=revision;
+      const revision=JSON.stringify([state.activeJob,state.paused,state.jobs.map(j=>[j.id,j.updatedAt,j.queuePosition]),state.aiVerify?.version,state.salesFill?[state.salesFill.counts?.done||0,state.salesFill.counts?.nodata||0]:null]);if(!force&&revision===this.revision){if(aiChanged&&current&&typeof renderQualityPending==='function')renderQualityPending();return;}this.revision=revision;
       // Keep optimistic deletes stable until the API finishes; a stale poll must not resurrect them.
       if(window.rfDeleteGuard)state=window.rfDeleteGuard.apply(state,seq);
       this.snapshot=state;
