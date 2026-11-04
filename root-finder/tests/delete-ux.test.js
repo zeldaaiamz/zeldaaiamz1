@@ -29,7 +29,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
   assert(app.includes('m.youngMarket.length'),'FE visible includes young');
   assert(quality.includes('data-delete-row'),'pending panel delete');
   assert(app.includes('data-record-id="${esc(rowRecord(row).id)}"'),'result card delete attrs');
-  assert(/\?v=(delpend-2|fav-1)/.test(index),'cache bust');
+  assert(/\?v=(delpend-2|fav-1|delre-1)/.test(index),'cache bust');
   console.log('ok FE/BE gate alignment');
 })();
 
@@ -122,9 +122,9 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
   let state={records:[{id:'r1',data:{opportunities:[{keyword:'banana squishy'},{keyword:'keep'}]}}]};
   state={...state,records:state.records.map(rec=>({...rec,data:{...rec.data,opportunities:(rec.data.opportunities||[]).filter(r=>!gone.has(JSON.stringify([rec.id,r.keyword])))}})).filter(rec=>(rec.data.opportunities||[]).length>0)};
   eq(state.records[0].data.opportunities.map(r=>r.keyword),['keep'],'strip');
-  assert(cloud.includes('gone.has(JSON.stringify([rec.id,r.keyword]))'),'cloud strip');
-  assert(app.includes('keys.forEach(k=>deletingKeys.delete(k));if(window.RootFinderCloud)'),'clear before reload');
-  assert(app.includes('部分已删除'),'partial undo toast');
+  assert(cloud.includes('rfDeleteGuard.apply(state,seq)'),'cloud strip via tombstones');
+  assert(app.includes('gk.forEach(k=>deletingKeys.delete(k));'),'clear before reload');
+  assert(app.includes('删除失败，已恢复显示'),'failure restore toast');
   assert(app.includes('正在删除中，请稍候再撤销'),'undo while deleting msg');
   console.log('ok poll strip + polish copy');
 })();
