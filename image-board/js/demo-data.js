@@ -1,9 +1,11 @@
-/* 演示数据 — 全部标注为 DEMO，无真实 API */
+/* 演示数据 — 全部标注为 DEMO，无真实 API
+ * 主图硬性规范唯一标准详见：/workspace/amazon/specs/amazon_main_image_brief_rules.md
+ */
 window.DEMO = {
   product: {
     name: "Sincerez 牛皮纸鼓励卡 54 张",
     asin: "B0DEMO-KRAFT54",
-    note: "演示数据 · 参考 Etsy inspirational quote card 洞察 + image_brief_v1",
+    note: "演示数据 · 参考 Etsy inspirational quote card 洞察 + image_brief_v1 · 主图规范见 /workspace/amazon/specs/amazon_main_image_brief_rules.md",
   },
 
   archives: {
@@ -75,9 +77,10 @@ window.DEMO = {
   models: [
     { id: "upload", name: "自有上传", cls: "model-upload" },
     { id: "whitebg", name: "白底真修", cls: "model-doubao" },
-    { id: "chatgpt", name: "ChatGPT", cls: "model-chatgpt" },
-    { id: "banana", name: "Banana", cls: "model-banana" },
     { id: "doubao", name: "豆包", cls: "model-doubao" },
+    { id: "banana", name: "Banana", cls: "model-banana" },
+    { id: "grok", name: "Grok", cls: "model-grok" },
+    { id: "chatgpt", name: "ChatGPT", cls: "model-chatgpt" },
     { id: "midjourney", name: "Midjourney", cls: "model-midjourney" },
   ],
 
@@ -85,16 +88,20 @@ window.DEMO = {
   qiushuang: [
     {
       id: "qs-main",
+      who: "秋霜",
+      badge: "主图",
       slotHint: "Listing #1",
       title: "主图（白底）",
       role: "产品占比 ≥85%",
       brief:
-        "纯白 RGB255 背景。打开的牛皮纸盒在后，卡片在前错落/扇形叠放，略俯视 3/4。选打字机字最清晰的 3–5 张朝上。靠产品自身排版做出复古氛围，禁止道具与文字叠层。",
+        "【主图硬性规范（详见 /workspace/amazon/specs/amazon_main_image_brief_rules.md）】\n1. 纯白背景 RGB(255,255,255)\n2. 只展示在售商品本身，专业实拍，产品占画面 ≥85%，完整入框、不被裁切\n3. 禁止任何说明性文字、Logo、水印、色块、边框、插图/多角度拼图\n4. 一般不要包装盒（本品牛皮纸礼盒本身为「拿到就能送」卖点故保留同款实盒），不要信封/麻绳/干花等不在售道具误导\n5. 建议尺寸 ≥1600px（看板统一 2000×2000）\n传达目标（只能靠产品本体构图呈现）：打开的同款牛皮纸盒在后，卡片在前错落/扇形叠放，略俯视 3/4，选打字机字最清晰的 3–5 张朝上，靠产品自身排版与纸纹做出复古差异化；张数与卖点文案一律放副图。",
       prompt:
-        "Amazon main image, pure white background RGB(255,255,255), kraft paper encouragement card box slightly open behind, 4-5 typewriter-font kraft cards fanned in front, product occupying >=85% of frame, 3/4 top-down angle, natural side light showing paper texture and 350gsm edge, no props, no text overlay, no envelope, photorealistic product shot",
+        "Amazon US compliant main listing photo (2000x2000 px, >=1600px standard), pure solid white background RGB(255,255,255), ONLY the physical product for sale: kraft paper encouragement card box slightly open behind with 4-5 typewriter-font kraft cards fanned in front, product occupying >=85% of frame, centered, fully in frame and never cropped, 3/4 top-down studio angle, natural side light showing paper texture and 350gsm edge, STRICTLY NO explanatory text, NO text overlay, NO logos, NO watermarks, NO color blocks, NO borders, NO collages, NO props, NO envelope, photorealistic product shot",
     },
     {
       id: "qs-detail",
+      who: "秋霜",
+      badge: "细节图",
       slotHint: "Listing #4",
       title: "细节图 · 纸张厚度",
       role: "展现：侧面厚度 + 字迹锐利",
@@ -105,6 +112,8 @@ window.DEMO = {
     },
     {
       id: "qs-size",
+      who: "秋霜",
+      badge: "尺寸图",
       slotHint: "Listing #3",
       title: "尺寸图",
       role: "对比物：扑克牌 / 手持",
@@ -119,6 +128,8 @@ window.DEMO = {
   anran: [
     {
       id: "ar-54",
+      who: "安然",
+      badge: "场景图",
       slotHint: "Listing #2",
       title: "场景图 · 54 张铺开",
       role: "要点：量大、每张不同",
@@ -129,6 +140,8 @@ window.DEMO = {
     },
     {
       id: "ar-gift",
+      who: "安然",
+      badge: "场景图",
       slotHint: "Listing #5",
       title: "场景图 · 礼盒半开 A1",
       role: "视觉语言：拿到就能送",
@@ -139,6 +152,8 @@ window.DEMO = {
     },
     {
       id: "ar-quad",
+      who: "安然",
+      badge: "场景图",
       slotHint: "Listing #6",
       title: "场景图 · 四宫格用法",
       role: "A2 夹贺卡 + B1 关怀包 + C3 圣诞 + D1 课堂",
@@ -149,6 +164,8 @@ window.DEMO = {
     },
     {
       id: "ar-who",
+      who: "安然",
+      badge: "场景图",
       slotHint: "Listing #7",
       title: "场景图 · 送给谁",
       role: "人群标签视觉化",
@@ -159,6 +176,8 @@ window.DEMO = {
     },
     {
       id: "ar-wedding",
+      who: "安然",
+      badge: "场景图",
       slotHint: "扩展 / A+",
       title: "场景图 · 婚礼伴手 C1",
       role: "支线场景（可进预览替换）",
