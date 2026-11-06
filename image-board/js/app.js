@@ -1,4 +1,4 @@
-/* AI 做图看板 v5 — 白底/定稿留稿 + 历史报告 + 给新产品做图清空工作台 + 豆包/多模型生图 */
+/* AI 做图看板 v5 (imgboard-15) — 新产品彻底隔离 + 秋霜/安然自动协同规划七图 + 留稿历史 */
 (function () {
   const STORAGE_KEY = "ai-image-board-v3";
   const LEGACY_KEY = "ai-image-board-v2";
@@ -8,11 +8,23 @@
 
   const MAIN_FORBIDDEN_CLIENT_RE = /(明确标注|标注\s*\d+|卖点文字|卖点文案|说明性?文字|添加.*文字|elegantly\s+crafted|add\s+callout)/i;
 
+  function newSessionId() {
+    return "prod-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 6);
+  }
+
+  function buildOwnerSig(asin, productName, productSummary) {
+    const a = String(asin || "").trim().toUpperCase();
+    const n = String(productName || "").trim();
+    const p = String(productSummary || "").trim().slice(0, 80);
+    return `${a}|${n}|${p}`;
+  }
+
   const state = normalizeState(loadState() || defaultState());
   let serverStatus = null;
   let vocImporting = false;
   const boxRuntime = {};
   const chatRuntime = {};
+  const sevenCollabRuntime = { busy: false, startedAt: 0, controller: null, sessionId: null };
   let WB = null;
   let Hist = null;
   let lastDragEndAt = 0;
@@ -21,6 +33,8 @@
     return {
       mode: "demo",
       source: "amazon",
+      productSessionId: newSessionId(),
+      planOwnerSig: "",
       asin: DEMO.product.asin,
       productName: DEMO.product.name,
       productDir: DEMO.product.name,
@@ -46,6 +60,7 @@
       sevenPlanFile: null,
       sevenPlanStatus: null,
       sevenPlanStatusLabel: null,
+      sevenPlanStatusHint: null,
       sevenThemeChat: {},
       sevenThemeBusy: {},
     };
@@ -121,6 +136,66 @@
       s.activeWhitebgId = null;
     }
 
+    if (!s.productSessionId) s.productSessionId = newSessionId();
+    if (!s.sevenThemeChat || typeof s.sevenThemeChat !== "object") s.sevenThemeChat = {};
+    s.sevenThemeBusy = {};
+
+    // Demo mode must never hold real/previous product sevenImagePlan or chat
+    if (s.mode === "demo") {
+      s.archiveOverride = null;
+      s.sevenImagePlan = null;
+      s.planBoxes = null;
+      s.sevenPlanSource = null;
+      s.sevenPlanAuthor = null;
+      s.sevenPlanFile = null;
+      s.sevenPlanStatus = null;
+      s.sevenPlanStatusLabel = null;
+      s.sevenThemeChat = {};
+      s.productSummary = "";
+    } else {
+      // Real mode: never keep DEMO product ASIN/name placeholders
+      if (s.asin === DEMO.product.asin) s.asin = "";
+      if (s.productName === DEMO.product.name && !(s.productSummary || "").toLowerCase().includes("sincerez")) {
+        s.productName = "";
+        if (s.productDir === DEMO.product.name) s.productDir = "";
+      }
+      // Guard 1: archiveOverride ASIN mismatch with current state.asin -> drop stale plan
+      const archAsin = String((s.archiveOverride && s.archiveOverride.meta && s.archiveOverride.meta.asin) || "").trim().toUpperCase();
+      const curAsin = String(s.asin || "").trim().toUpperCase();
+      if (archAsin && curAsin && archAsin !== curAsin) {
+        s.archiveOverride = null;
+        s.sevenImagePlan = [];
+        s.planBoxes = [];
+        s.sevenPlanSource = null;
+        s.sevenPlanAuthor = null;
+        s.sevenPlanStatus = null;
+        s.sevenPlanStatusLabel = null;
+        s.sevenThemeChat = {};
+      }
+      // Guard 2: planOwnerSig ASIN prefix mismatch -> drop stale sevenImagePlan
+      if (s.planOwnerSig && typeof s.planOwnerSig === "string") {
+        const sigAsin = (s.planOwnerSig.split("|")[0] || "").trim().toUpperCase();
+        if (sigAsin && curAsin && sigAsin !== curAsin) {
+          s.sevenImagePlan = [];
+          s.planBoxes = [];
+          s.sevenThemeChat = {};
+        }
+      }
+      // Guard 3: Self-heal legacy B0GVDS8X33 hardcoded template pollution on non-therapy products
+      const isB0G = curAsin === "B0GVDS8X33" || /艺术治疗|art\s*therapy/i.test((s.productName || "") + " " + (s.productSummary || ""));
+      if (!isB0G && Array.isArray(s.sevenImagePlan) && s.sevenImagePlan.some((r) => r && (r.focusDisplay === "辅助艺术治疗" || (r.primaryTheme && r.primaryTheme.en === "Guided Art Therapy")))) {
+        s.sevenImagePlan = [];
+        s.planBoxes = [];
+        s.sevenThemeChat = {};
+        s.sevenPlanSource = "auto";
+        s.sevenPlanStatus = "draft_pending";
+        s.sevenPlanStatusLabel = "待秋霜+安然规划";
+        if ((s.productSummary || "").trim()) {
+          s._needsRefreshFromSummary = true;
+        }
+      }
+    }
+
     if (Array.isArray(s.planBoxes)) {
       s.planBoxes = s.planBoxes.map((b) => sanitizeCachedMainPlanBox(b, s.asin, s.productName));
     }
@@ -152,8 +227,17 @@
 
   function loadState() {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_KEY);
-      return raw ? JSON.parse(raw) : null;
+      const v3 = localStorage.getItem(STORAGE_KEY);
+      if (v3) {
+        localStorage.removeItem(LEGACY_KEY);
+        return JSON.parse(v3);
+      }
+      const leg = localStorage.getItem(LEGACY_KEY);
+      if (leg) {
+        localStorage.removeItem(LEGACY_KEY);
+        return JSON.parse(leg);
+      }
+      return null;
     } catch {
       return null;
     }
@@ -163,6 +247,7 @@
   function saveState() {
     const toSave = { ...state };
     delete toSave.genTargetBoxId;
+    delete toSave._needsRefreshFromSummary;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
     } catch (_) {}
@@ -193,19 +278,50 @@
     return "API_KEY";
   }
 
+  function effectiveAsin() {
+    if (state.mode === "demo") return DEMO.product.asin;
+    return (state.asin || "").trim();
+  }
+
+  function abortAllInFlight() {
+    if (sevenCollabRuntime.controller) {
+      try { sevenCollabRuntime.controller.abort("user"); } catch (_) {}
+    }
+    sevenCollabRuntime.busy = false;
+    sevenCollabRuntime.controller = null;
+    sevenCollabRuntime.sessionId = null;
+
+    Object.keys(boxRuntime).forEach((k) => {
+      if (boxRuntime[k] && boxRuntime[k].controller) {
+        try { boxRuntime[k].controller.abort("user"); } catch (_) {}
+      }
+      delete boxRuntime[k];
+    });
+    Object.keys(chatRuntime).forEach((k) => {
+      if (chatRuntime[k] && chatRuntime[k].controller) {
+        try { chatRuntime[k].controller.abort("user"); } catch (_) {}
+      }
+      delete chatRuntime[k];
+    });
+    if (WB && typeof WB.abortInFlight === "function") {
+      WB.abortInFlight();
+    }
+  }
+
   function isBlankNewProduct() {
     return (
       state.mode === "real" &&
-      !(state.asin || "").trim() &&
-      !(state.productName || "").trim() &&
       !state.archiveOverride &&
-      !(state.productSummary || "").trim()
+      !(state.productSummary || "").trim() &&
+      !(Array.isArray(state.sevenImagePlan) && state.sevenImagePlan.length > 0) &&
+      !(Array.isArray(state.planBoxes) && state.planBoxes.length > 0)
     );
   }
 
   function displayProductFolder() {
+    if (state.mode === "demo") return DEMO.product.name;
     if (state.productDir) return state.productDir;
-    const raw = (state.productName || state.asin || DEMO.product.name || "未命名产品").trim();
+    const raw = (state.productName || state.asin || "待填新产品名").trim();
     const clean = raw.replace(/[/\\:*?"<>|#%]+/g, " ").replace(/\s+/g, " ").trim();
     return clean.length > 64 ? clean.slice(0, 64).trim() : clean;
   }
@@ -530,22 +646,38 @@
 
   function renderSevenImagePlan(isRealCard) {
     const seven = activeSevenPlan();
+    const blankNew = isBlankNewProduct();
     const src = state.sevenPlanSource || (activeArchive() && activeArchive().sevenPlanSource) || "";
     const author = state.sevenPlanAuthor || (activeArchive() && activeArchive().sevenPlanAuthor) || "";
     const status = state.sevenPlanStatus || (activeArchive() && activeArchive().sevenPlanStatus) || (src === "authored" ? "final" : "draft_pending");
     const statusLabel =
       state.sevenPlanStatusLabel ||
       (activeArchive() && activeArchive().sevenPlanStatusLabel) ||
-      (status === "final" ? "定稿" : status === "authored_pending_final" ? "定稿优先（待终审）" : "待秋霜+安然规划");
+      (status === "final"
+        ? "定稿"
+        : status === "authored_pending_final"
+          ? "定稿优先（待终审）"
+          : status === "ai_planned_pending_confirm"
+            ? "秋霜+安然已规划（待确认）"
+            : "待秋霜+安然规划");
     const isAuthored = src === "authored";
     const isDraft = status === "draft_pending";
-    const tagClass = isDraft ? "tag-demo" : "tag-real";
+    const isCollabDone = status === "ai_planned_pending_confirm";
+    const tagClass = isDraft ? "tag-demo" : isCollabDone ? "tag-collab" : "tag-real";
+    const collabBusy = !!sevenCollabRuntime.busy;
+    const collabSec = collabBusy ? Math.max(0, Math.floor((Date.now() - sevenCollabRuntime.startedAt) / 1000)) : 0;
 
     if (!seven || !seven.length) {
       return `<div class="seven-plan seven-plan-empty-wrap" style="grid-column:1/-1">
-        <div class="seven-plan-head"><h3>VOC → 七图主题规划</h3>
-          <span class="tag tag-demo">待秋霜+安然规划</span></div>
-        <div class="seven-plan-empty">导入真实 VOC 后，将按图1→图7横向展示主题卡片（可滚动）；无定稿前为自动草稿，须秋霜+安然定稿后才当终稿。</div>
+        <div class="seven-plan-head">
+          <h3>VOC → 七图主题规划</h3>
+          <span class="tag ${blankNew ? "tag-mock" : "tag-demo"}">${blankNew ? "新产品待填入信息" : "待秋霜+安然规划"}</span>
+        </div>
+        <div class="seven-plan-empty">${
+          blankNew
+            ? "旧产品内容已彻底清空。请在上方填写新产品名称 / 导入 VOC 或点「导入产品数据」粘贴产品总结，秋霜（图1–3）与安然（图4–7）将立即围绕新产品协同规划七图主题。"
+            : "导入真实 VOC 或粘贴产品数据后，将按图1→图7横向展示当前产品主题卡片（可左右滚动），并由秋霜+安然针对当前产品完成规划。"
+        }</div>
       </div>`;
     }
 
@@ -611,11 +743,32 @@
       })
       .join("");
 
+    const curProdTitle = state.productName || state.asin || "当前产品";
     const sub = isDraft
-      ? "当前为自动归纳草稿，状态「待秋霜+安然规划」——Hongyan 勿当终稿。图1–3 找秋霜、图4–7 找安然在卡片内对话改重点展示。"
-      : isAuthored
-        ? `定稿优先已载入（${escapeHtml(author || "秋霜+安然")}）。横向图1→图7；卡片内可与负责人对话改重点展示（不自动生图）。`
-        : "七图主题横向排布；放不下请左右滑动。";
+      ? `当前为「${escapeHtml(curProdTitle)}」自动归纳草稿，状态「待秋霜+安然规划」——可点右上角「让秋霜+安然立即规划」，或在卡片内分别找秋霜（图1–3）/安然（图4–7）微调。`
+      : isCollabDone
+        ? `秋霜（图1–3）与安然（图4–7）已针对「${escapeHtml(curProdTitle)}」完成协同规划；可在卡片内继续对话调整，满意后点右上角「确认七图定稿」。`
+        : isAuthored
+          ? `定稿优先已载入（${escapeHtml(author || "秋霜+安然")} · ${escapeHtml(curProdTitle)}）。横向图1→图7；卡片内可与负责人对话改重点展示（不自动生图）。`
+          : "七图主题横向排布；放不下请左右滑动。";
+
+    const collabBanner = collabBusy
+      ? `<div class="seven-collab-banner">
+          <div class="lhs">
+            <span class="spinner"></span>
+            <span><strong>秋霜（图1–3 主图/细节/尺寸）+ 安然（图4–7 场景/对比/收口）正在工作：</strong>围绕「${escapeHtml(curProdTitle)}」协同规划七图主题… <span data-collab-elapsed>已用 ${collabSec}s</span></span>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm" data-action="cancel-seven-collab">取消</button>
+        </div>`
+      : "";
+
+    const actionButtons = `
+      <div class="seven-plan-actions">
+        <button type="button" class="btn ${isDraft ? "btn-primary" : ""} btn-sm" data-action="run-seven-collab" ${collabBusy ? "disabled" : ""}>
+          ${collabBusy ? '<span class="spinner"></span> 秋霜+安然规划中…' : isDraft ? "✨ 让秋霜+安然立即规划" : "↻ 让秋霜+安然重新规划"}
+        </button>
+        ${status !== "final" ? `<button type="button" class="btn btn-success btn-sm" data-action="confirm-seven-final" ${collabBusy ? "disabled" : ""}>✓ 确认七图定稿</button>` : ""}
+      </div>`;
 
     return `<div class="seven-plan" style="grid-column:1/-1">
       <div class="seven-plan-head">
@@ -623,12 +776,172 @@
         <span class="tag ${tagClass}" data-seven-status="${escapeHtml(status)}">${escapeHtml(statusLabel)}</span>
         ${isDraft ? `<span class="tag tag-demo">待确认草稿</span>` : ""}
         ${isAuthored && !isDraft ? `<span class="tag tag-real">定稿优先</span>` : ""}
+        ${actionButtons}
       </div>
       <p class="seven-plan-sub">${sub}</p>
+      ${collabBanner}
       <div class="seven-hscroll" tabindex="0" aria-label="七图主题横向滚动">
         <div class="seven-track">${cards}</div>
       </div>
     </div>`;
+  }
+
+  async function runCollaborativeSevenPlan(opts) {
+    const autoTrigger = !!(opts && opts.auto);
+    if (sevenCollabRuntime.busy) {
+      if (!autoTrigger) toast("秋霜+安然正在协同规划中，请稍候…");
+      return;
+    }
+    if (!state.archiveOverride && !(state.productSummary || "").trim() && !(state.sevenImagePlan && state.sevenImagePlan.length)) {
+      if (!autoTrigger) toast("请先导入 VOC 或粘贴新产品数据，再让秋霜+安然规划");
+      return;
+    }
+
+    const sessionAtStart = state.productSessionId || (state.productSessionId = newSessionId());
+    const ctrl = new AbortController();
+    sevenCollabRuntime.busy = true;
+    sevenCollabRuntime.startedAt = Date.now();
+    sevenCollabRuntime.controller = ctrl;
+    sevenCollabRuntime.sessionId = sessionAtStart;
+    renderArchive();
+
+    try {
+      const res = await API.post(
+        "/api/seven-plan/collaborate",
+        {
+          asin: effectiveAsin() || undefined,
+          productName: state.productName || undefined,
+          archive: state.archiveOverride || undefined,
+          productSummary: state.productSummary || undefined,
+          sevenImagePlan: state.sevenImagePlan || undefined,
+        },
+        { timeoutMs: 85000, signal: ctrl.signal }
+      );
+      if (state.productSessionId !== sessionAtStart) {
+        return; // Switched to another product while in-flight — strictly discard!
+      }
+      if (!res || res.ok === false) {
+        throw new Error((res && res.error) || "秋霜+安然协同规划失败");
+      }
+      if (res.productName && (!state.productName || state.productName === "新产品")) {
+        state.productName = res.productName;
+      }
+      if (res.productDir && (!state.productDir || state.productDir === "新产品")) {
+        state.productDir = res.productDir;
+      }
+      state.archiveOverride = res.archive || state.archiveOverride;
+      state.sevenImagePlan = res.sevenImagePlan || state.sevenImagePlan;
+      state.sevenPlanSource = res.sevenPlanSource || "ai_collaborated";
+      state.sevenPlanAuthor = res.sevenPlanAuthor || "秋霜（图1–3）+ 安然（图4–7）协同规划";
+      state.sevenPlanStatus = res.sevenPlanStatus || "ai_planned_pending_confirm";
+      state.sevenPlanStatusLabel = res.sevenPlanStatusLabel || "秋霜+安然已规划（待确认）";
+      state.sevenPlanStatusHint = res.sevenPlanStatusHint || null;
+      state.planOwnerSig = buildOwnerSig(state.asin, state.productName, state.productSummary);
+
+      state.planBoxes = (res.planBoxes || state.planBoxes || []).map((b) =>
+        sanitizeCachedMainPlanBox(
+          {
+            ...b,
+            who: b.who || (["主图", "细节图", "尺寸图"].includes(b.badge) ? "秋霜" : "安然"),
+          },
+          state.asin,
+          state.productName
+        )
+      );
+      Object.keys(state.boxes || {}).forEach((bid) => {
+        const b = state.boxes[bid];
+        if (!b) return;
+        b.briefOverride = null;
+        b.promptOverride = null;
+      });
+
+      state.sevenThemeChat = state.sevenThemeChat || {};
+      if (res.qiushuangReply) {
+        state.sevenThemeChat[1] = state.sevenThemeChat[1] || [];
+        state.sevenThemeChat[1].push({ role: "assistant", who: "秋霜", content: res.qiushuangReply });
+      }
+      if (res.anranReply) {
+        state.sevenThemeChat[4] = state.sevenThemeChat[4] || [];
+        state.sevenThemeChat[4].push({ role: "assistant", who: "安然", content: res.anranReply });
+      }
+
+      saveState();
+      syncProductIdentityInputs();
+      setModeUI();
+      renderArchive();
+      renderPlans();
+      toast(
+        res.mock
+          ? "已按当前产品资料生成七图结构化草稿（可逐卡微调或点确认定稿）"
+          : `秋霜+安然已完成「${state.productName || state.asin || "新产品"}」七图主题规划！请审阅后点「确认七图定稿」`,
+        { duration: 4800 }
+      );
+    } catch (err) {
+      if (state.productSessionId !== sessionAtStart) return;
+      if (err && err.isCancelled) {
+        toast("已取消秋霜+安然协同规划");
+      } else if (!autoTrigger) {
+        toast("秋霜+安然规划请求提示：" + humanizeError(err, "doubao"), { duration: 4500 });
+      }
+    } finally {
+      if (sevenCollabRuntime.sessionId === sessionAtStart) {
+        sevenCollabRuntime.busy = false;
+        sevenCollabRuntime.controller = null;
+        sevenCollabRuntime.sessionId = null;
+        renderArchive();
+      }
+    }
+  }
+
+  async function confirmSevenPlanFinal() {
+    if (!state.sevenImagePlan || state.sevenImagePlan.length < 7) {
+      toast("当前暂无完整七图主题可确认");
+      return;
+    }
+    try {
+      const res = await API.post(
+        "/api/seven-plan/confirm",
+        {
+          asin: effectiveAsin() || undefined,
+          productName: state.productName || undefined,
+          productSummary: state.productSummary || undefined,
+          sevenImagePlan: state.sevenImagePlan,
+        },
+        { timeoutMs: 25000 }
+      );
+      state.sevenImagePlan = res.sevenImagePlan || state.sevenImagePlan;
+      state.sevenPlanSource = "authored";
+      state.sevenPlanAuthor = res.sevenPlanAuthor || "秋霜+安然 · 看板确认终审通过";
+      state.sevenPlanFile = res.sevenPlanFile || null;
+      state.sevenPlanStatus = "final";
+      state.sevenPlanStatusLabel = "定稿";
+      if (state.archiveOverride && typeof state.archiveOverride === "object") {
+        state.archiveOverride.sevenImagePlan = state.sevenImagePlan;
+        state.archiveOverride.sevenPlanSource = "authored";
+        state.archiveOverride.sevenPlanAuthor = state.sevenPlanAuthor;
+        state.archiveOverride.sevenPlanStatus = "final";
+        state.archiveOverride.sevenPlanStatusLabel = "定稿";
+      }
+      if (Array.isArray(res.planBoxes) && res.planBoxes.length) {
+        state.planBoxes = res.planBoxes.map((b) =>
+          sanitizeCachedMainPlanBox(
+            {
+              ...b,
+              who: b.who || (["主图", "细节图", "尺寸图"].includes(b.badge) ? "秋霜" : "安然"),
+            },
+            state.asin,
+            state.productName
+          )
+        );
+      }
+      saveState();
+      renderArchive();
+      renderPlans();
+      refreshStatusQuiet();
+      toast(`✓ 已确认「${state.productName || state.asin || "当前产品"}」七图主题为「定稿」`);
+    } catch (err) {
+      toast("确认定稿失败：" + humanizeError(err, "voc"), { duration: 4200 });
+    }
   }
 
   function onSevenPlanEdit(e) {
@@ -661,7 +974,7 @@
         });
     }
     syncPlanBoxesFromSeven();
-    // soft re-render plans only
+    saveStateDebounced();
     if (typeof renderPlans === "function") renderPlans();
   }
 
@@ -673,9 +986,11 @@
     const input = document.querySelector(`[data-seven-chat-input="${idx}"]`);
     const userMsg = ((input && input.value) || "").trim();
     if (!userMsg) {
+      if (input) input.focus();
       toast("请先输入重点展示修改意见");
       return;
     }
+    const sessionAtStart = state.productSessionId;
     const who = row.owner || (idx <= 3 ? "秋霜" : "安然");
     state.sevenThemeChat = state.sevenThemeChat || {};
     state.sevenThemeChat[idx] = state.sevenThemeChat[idx] || [];
@@ -693,7 +1008,7 @@
           userMessage: userMsg,
           slot: row.slot || row.badge,
           row,
-          asin: state.asin,
+          asin: effectiveAsin(),
           productName: state.productName,
           prompt: box.prompt || "",
           messages: (state.sevenThemeChat[idx] || []).slice(-8).map((m) => ({
@@ -703,8 +1018,8 @@
         },
         { timeoutMs: 60000 }
       );
+      if (state.productSessionId !== sessionAtStart) return;
       if (!res || res.ok === false) throw new Error((res && res.error) || "主题对话失败");
-      // Write back theme fields — never auto-generate images
       if (res.autoGenerate) {
         console.warn("seven-theme-chat ignored autoGenerate");
       }
@@ -717,7 +1032,6 @@
         visualNotes: res.visualNotes != null ? res.visualNotes : next.visualNotes,
         owner: who,
       });
-      // sync linked planBox brief/prompt
       if (Array.isArray(state.planBoxes)) {
         const b = state.planBoxes.find((x) => Number(x.imageIndex) === idx);
         if (b) {
@@ -735,28 +1049,38 @@
       }
       syncPlanBoxesFromSeven();
       state.sevenThemeChat[idx].push({ role: "assistant", content: res.reply || "已更新主题", who });
+      saveState();
       toast(`${who}已更新图${idx}主题（未生图）`);
     } catch (err) {
+      if (state.productSessionId !== sessionAtStart) return;
       state.sevenThemeChat[idx].push({
         role: "assistant",
         content: "对话失败：" + (err.message || String(err)),
         who,
       });
+      saveState();
       toast("主题对话失败：" + (err.message || String(err)), { duration: 4000 });
     } finally {
-      state.sevenThemeBusy[idx] = false;
-      renderArchive();
-      if (typeof renderPlans === "function") renderPlans();
+      if (state.productSessionId === sessionAtStart) {
+        state.sevenThemeBusy[idx] = false;
+        renderArchive();
+        if (typeof renderPlans === "function") renderPlans();
+      }
     }
   }
 
-    function renderArchive() {
+  function renderArchive() {
     const data = activeArchive();
+    const blankNew = isBlankNewProduct();
     const isRealCard = isRealMode() && state.source === "amazon" && !!state.archiveOverride;
-    document.getElementById("source-label").textContent = (data.label || "") + (isRealCard ? " · 真实导入" : " · 演示数据");
+    document.getElementById("source-label").textContent = blankNew
+      ? "新产品工作台（待导入 VOC 或粘贴新产品数据）"
+      : (data.label || "") + (isRealCard ? " · 真实导入" : " · 演示数据");
     document.querySelectorAll("#source-toggle button").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.source === state.source);
     });
+    const badgeCls = blankNew ? "tag-mock" : isRealCard ? "tag-real" : "tag-demo";
+    const badgeTxt = blankNew ? "待导入" : isRealCard ? "真实" : "演示";
     const cards = [
       { key: "pain", title: "痛点", cls: "pain", items: data.pain || [] },
       { key: "itch", title: "痒点", cls: "itch", items: data.itch || [] },
@@ -769,20 +1093,46 @@
         .map(
           (c) => `
       <article class="archive-card ${c.cls}">
-        <h3><span class="dot"></span>${c.title} <span class="tag ${isRealCard ? "tag-real" : "tag-demo"}">${isRealCard ? "真实" : "演示"}</span></h3>
-        <ul>${c.items.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>
+        <h3><span class="dot"></span>${c.title} <span class="tag ${badgeCls}">${badgeTxt}</span></h3>
+        <ul>${
+          c.items.length
+            ? c.items.map((i) => `<li>${escapeHtml(i)}</li>`).join("")
+            : `<li style="color:var(--muted);list-style:none;">（待导入新产品数据）</li>`
+        }</ul>
       </article>`
         )
         .join("") +
-      `<div class="archive-map" style="grid-column:1/-1">字段映射：${escapeHtml(data.note || "")} · 七图规划见上方（规范：amazon_secondary_image_voc_callout_rules.md）</div>`;
+      `<div class="archive-map" style="grid-column:1/-1">字段映射：${escapeHtml(
+        blankNew ? "已彻底清空旧产品，新产品数据导入后自动映射" : data.note || ""
+      )} · 七图规划见上方（规范：amazon_secondary_image_voc_callout_rules.md）</div>`;
     const grid = document.getElementById("archive-grid");
     if (grid && !grid._sevenBound) {
       grid.addEventListener("change", onSevenPlanEdit);
       grid.addEventListener("blur", onSevenPlanEdit, true);
+      grid.addEventListener("click", (ev) => {
+        const btn = ev.target.closest("[data-action]");
+        if (!btn) return;
+        const act = btn.getAttribute("data-action");
+        if (act === "send-seven-theme-chat") {
+          ev.preventDefault();
+          sendSevenThemeChat(btn.getAttribute("data-seven-idx"));
+        } else if (act === "run-seven-collab") {
+          ev.preventDefault();
+          runCollaborativeSevenPlan({ auto: false });
+        } else if (act === "cancel-seven-collab") {
+          ev.preventDefault();
+          if (sevenCollabRuntime.controller) {
+            try { sevenCollabRuntime.controller.abort("user"); } catch (_) {}
+          }
+        } else if (act === "confirm-seven-final") {
+          ev.preventDefault();
+          confirmSevenPlanFinal();
+        }
+      });
       grid.addEventListener("keydown", (ev) => {
         const t = ev.target;
         if (!t || !t.dataset || !t.dataset.sevenChatInput) return;
-        if (ev.key === "Enter") {
+        if (ev.key === "Enter" && !ev.isComposing) {
           ev.preventDefault();
           sendSevenThemeChat(t.dataset.sevenChatInput);
         }
@@ -796,7 +1146,10 @@
     const qs = all.filter((b) => b.who === "秋霜" || (b.id || "").startsWith("qs-") || ["主图", "细节图", "尺寸图"].includes(b.badge));
     const qsIds = new Set(qs.map((b) => b.id));
     const ar = all.filter((b) => !qsIds.has(b.id));
-    if (!qs.length && !ar.length) return { qs: DEMO.qiushuang, ar: DEMO.anran };
+    if (!qs.length && !ar.length) {
+      if (state.mode === "demo") return { qs: DEMO.qiushuang, ar: DEMO.anran };
+      return { qs: [], ar: [] };
+    }
     return { qs, ar };
   }
 
@@ -1000,8 +1353,9 @@
       const badges = [...new Set(qs.map((b) => b.badge || (b.id.startsWith("qs-main") ? "主图" : b.id.startsWith("qs-size") ? "尺寸图" : "细节图")).filter(Boolean))];
       qsWhoEl.textContent = badges.length ? badges.join(" · ") : "主图 · 细节图 · 尺寸图";
     }
-    document.getElementById("boxes-qiushuang").innerHTML = qs.map(renderPlanBox).join("") || "<div class='empty-msg'>暂无秋霜框</div>";
-    document.getElementById("boxes-anran").innerHTML = ar.map(renderPlanBox).join("") || "<div class='empty-msg'>暂无安然框</div>";
+    const emptyPlanMsg = isBlankNewProduct() ? "<div class='empty-msg'>新产品待规划 · 请在第 1 层导入 VOC 或粘贴新产品数据，秋霜与安然将按新产品生成规划框</div>" : "<div class='empty-msg'>暂无规划框</div>";
+    document.getElementById("boxes-qiushuang").innerHTML = qs.map(renderPlanBox).join("") || emptyPlanMsg;
+    document.getElementById("boxes-anran").innerHTML = ar.map(renderPlanBox).join("") || emptyPlanMsg;
   }
 
   async function sendPromptChat(boxId) {
@@ -1037,7 +1391,7 @@
           who,
           badge: (plan && plan.badge) || (boxId.startsWith("qs-main") ? "主图" : ""),
           title: (plan && plan.title) || boxId,
-          asin: state.asin || DEMO.product.asin,
+          asin: effectiveAsin() || "",
           productName: state.productName || "",
           brief: curBrief,
           prompt: curPrompt,
@@ -1393,7 +1747,7 @@
               provider: mid,
               prompt,
               boxId,
-              asin: state.asin || DEMO.product.asin,
+              asin: effectiveAsin() || "NOASIN",
               productName: state.productName || "",
               whitebgImageUrl: wbRef.imageUrl,
               refImages: vInfo.matched,
@@ -1510,7 +1864,7 @@
           provider: targetProvider,
           prompt: newPrompt,
           boxId,
-          asin: state.asin || DEMO.product.asin,
+          asin: effectiveAsin() || "",
           productName: state.productName || "",
           whitebgImageUrl: wbRef.imageUrl,
           refImages: vInfo.matched,
@@ -1696,7 +2050,7 @@
         const res = await API.post(
           "/api/upload",
           {
-            asin: state.asin || DEMO.product.asin,
+            asin: effectiveAsin() || "UPLOAD",
             productName: state.productName || "",
             boxId: boxId || KIND_TO_BOX[kind] || "",
             kind,
@@ -1741,44 +2095,138 @@
     input.click();
   }
 
+  function syncProductIdentityInputs() {
+    const pni = document.getElementById("product-name-input");
+    if (pni && document.activeElement !== pni) {
+      pni.value = state.mode === "demo" ? "" : (state.productName || "");
+    }
+    const vq = document.getElementById("voc-query");
+    if (vq && document.activeElement !== vq) {
+      vq.value = state.mode === "demo" ? "" : (state.asin || "");
+    }
+  }
+
   function syncProductDataPanel() {
-    const panel = document.getElementById("product-data-panel");
     const ta = document.getElementById("product-data-text");
     if (ta && document.activeElement !== ta) {
       ta.value = state.productSummary || "";
     }
-    if (panel && state.productSummary && panel.hasAttribute("hidden") === false) {
-      /* keep open if user opened it */
-    }
   }
 
-  async function applyProductData() {
+  function peekPastedIdentity(text) {
+    const s = String(text || "");
+    const mAsin = /\b(B0[A-Z0-9]{8})\b/i.exec(s);
+    const asin = mAsin && !mAsin[1].toUpperCase().startsWith("B0DEMO") ? mAsin[1].toUpperCase() : "";
+    let name = "";
+    const mLbl = /^(?:产品名称|产品名|商品名称|品名|Product(?:\s*Name)?)\s*[:：]\s*(.+)$/im.exec(s.replace(/\*\*/g, ""));
+    const mBold = /这款\s*\*\*([^*]{2,56})\*\*/.exec(s);
+    if (mLbl) name = mLbl[1].trim();
+    else if (mBold) name = mBold[1].trim();
+    return { asin, name };
+  }
+
+  async function applyProductData(opts) {
+    const silent = !!(opts && opts.silent);
     const ta = document.getElementById("product-data-text");
     const st = document.getElementById("product-data-status");
     const btn = document.getElementById("btn-product-data-apply");
-    const text = ((ta && ta.value) || "").trim();
+    const pni = document.getElementById("product-name-input");
+    const vq = document.getElementById("voc-query");
+    const text = ((ta && ta.value) || state.productSummary || "").trim();
     if (!text) {
       if (st) { st.className = "voc-status err"; st.textContent = "请先粘贴产品总结"; }
-      toast("请先粘贴产品总结", { duration: 2500 });
+      if (!silent) toast("请先粘贴产品总结", { duration: 2500 });
       return;
     }
     if (btn) btn.disabled = true;
-    if (st) { st.className = "voc-status"; st.textContent = "正在写入规划框…"; }
+    if (st) { st.className = "voc-status"; st.textContent = "正在解析当前产品资料并唤醒秋霜+安然…"; }
+
     try {
+      const typedName = ((pni && pni.value) || "").trim();
+      const typedAsin = ((vq && vq.value) || "").trim();
+      const hinted = peekPastedIdentity(text);
+      const wasDemo = state.mode === "demo";
+      const wasBlank = isBlankNewProduct();
+
+      const prevRealAsin = wasDemo ? "" : (state.asin || "").trim();
+      const prevRealName = wasDemo ? "" : (state.productName || "").trim();
+
+      // Only merge with existing VOC archive when it is genuinely the SAME real VOC task!
+      const hasSameRealVoc =
+        !wasDemo &&
+        !!(state.archiveOverride && state.archiveOverride.source === "amazon-voc" && !state.archiveOverride.fromProductSummary) &&
+        (!typedAsin || typedAsin.toUpperCase() === prevRealAsin.toUpperCase()) &&
+        (!hinted.asin || !prevRealAsin || hinted.asin.toUpperCase() === prevRealAsin.toUpperCase()) &&
+        (!typedName || !prevRealName || typedName === prevRealName) &&
+        (!hinted.name || !prevRealName || hinted.name === prevRealName);
+
+      if (!hasSameRealVoc) {
+        const hadPriorProductWork = !wasDemo && !wasBlank && !!(state.archiveOverride || (state.sevenImagePlan && state.sevenImagePlan.length));
+        const isSwitchingProduct =
+          hadPriorProductWork &&
+          ((hinted.name && prevRealName && hinted.name !== prevRealName) ||
+            (typedName && prevRealName && typedName !== prevRealName) ||
+            (hinted.asin && prevRealAsin && hinted.asin !== prevRealAsin));
+
+        if (sevenCollabRuntime.controller) {
+          try { sevenCollabRuntime.controller.abort("user"); } catch (_) {}
+          sevenCollabRuntime.busy = false;
+        }
+        state.productSessionId = newSessionId();
+        state.archiveOverride = null;
+        state.sevenImagePlan = [];
+        state.sevenPlanSource = "auto";
+        state.sevenPlanAuthor = null;
+        state.sevenPlanFile = null;
+        state.sevenPlanStatus = "draft_pending";
+        state.sevenPlanStatusLabel = "待秋霜+安然规划";
+        state.sevenThemeChat = {};
+        state.sevenThemeBusy = {};
+        state.taskId = null;
+
+        if (wasDemo || isSwitchingProduct) {
+          state.boxes = {};
+          state.preview = [null, null, null, null, null, null, null];
+          state.whitebgSources = [];
+          state.whitebgSelectedSourceIds = [];
+          state.whitebgSelectedSourceId = null;
+          state.whitebgResults = [];
+          state.selectedWhitebgIds = [];
+          state.activeWhitebgId = null;
+          Object.keys(boxRuntime).forEach((k) => delete boxRuntime[k]);
+          Object.keys(chatRuntime).forEach((k) => delete chatRuntime[k]);
+        }
+      }
+
+      const candidateAsin = typedAsin || hinted.asin || (hasSameRealVoc ? prevRealAsin : "") || undefined;
+      const candidateName = typedName || hinted.name || (hasSameRealVoc ? prevRealName : "") || undefined;
+
       const body = {
         text,
-        asin: state.asin || undefined,
-        productName: state.productName || state.productDir || undefined,
+        asin: candidateAsin,
+        productName: candidateName,
       };
-      if (state.archiveOverride && typeof state.archiveOverride === "object") {
+      if (hasSameRealVoc && state.archiveOverride) {
         body.archive = state.archiveOverride;
       }
+
       const res = await API.post("/api/product-data/import", body, { timeoutMs: 30000 });
       state.productSummary = res.productSummary || text;
       state.mode = "real";
       state.source = "amazon";
-      state.archiveOverride = res.archive || state.archiveOverride;
-      state.sevenImagePlan = res.sevenImagePlan || null;
+      state.asin = res.asin || candidateAsin || "";
+      state.productName = res.productName || candidateName || state.asin || "新产品";
+      state.productDir = res.productDir || state.productName;
+      state.archiveOverride = res.archive || null;
+      state.sevenImagePlan = res.sevenImagePlan || [];
+      state.sevenPlanSource = res.sevenPlanSource || "auto";
+      state.sevenPlanAuthor = res.sevenPlanAuthor || null;
+      state.sevenPlanFile = res.sevenPlanFile || null;
+      state.sevenPlanStatus = res.sevenPlanStatus || "draft_pending";
+      state.sevenPlanStatusLabel = res.sevenPlanStatusLabel || "待秋霜+安然规划";
+      state.sevenPlanStatusHint = res.sevenPlanStatusHint || null;
+      state.planOwnerSig = buildOwnerSig(state.asin, state.productName, state.productSummary);
+
       state.planBoxes = (res.planBoxes || []).map((b) =>
         sanitizeCachedMainPlanBox(
           {
@@ -1789,15 +2237,7 @@
           state.productName
         )
       );
-      if (!state.asin) {
-        state.asin = res.asin || state.asin;
-      }
-      if (res.productName && (!state.productName || state.productName === DEMO.product.name)) {
-        state.productName = res.productName;
-        state.productDir = res.productDir || res.productName;
-      }
       if (res.saved) state.lastSavePath = res.saved.category + "/" + res.saved.filename;
-      // Clear per-box overrides so injected summary is visible
       Object.keys(state.boxes || {}).forEach((bid) => {
         const b = state.boxes[bid];
         if (!b) return;
@@ -1805,35 +2245,47 @@
         b.promptOverride = null;
       });
       saveState();
+      syncProductIdentityInputs();
       setModeUI();
       renderArchive();
       renderPlans();
       renderPreview();
       if (WB) { WB.renderUploads(); WB.renderResults(); }
+
       const n = (state.planBoxes || []).length;
       const parsed = res.parsed || {};
       const itchN = (parsed.itch || []).length;
+      const painN = (parsed.pain || []).length;
       if (st) {
         st.className = "voc-status ok";
-        st.textContent = `✓ 已写入 ${n} 个规划框（抽出在意点 ${itchN} 条；粘贴优先，VOC 补充）`;
+        st.textContent = `✓ 已按「${state.productName}」生成 ${n} 框初稿（在意点 ${itchN} · 痛点 ${painN}）· 秋霜+安然正在协同精修七图主题…`;
       }
-      toast(`产品总结已进入规划框 brief/prompt（${n} 框）`);
+      if (!silent) {
+        toast(`已载入「${state.productName}」产品数据 · 秋霜（图1–3）与安然（图4–7）开始协同规划七图`);
+      }
+
+      // Immediately dispatch 秋霜+安然 collaborative LLM pass for this new product!
+      runCollaborativeSevenPlan({ auto: true });
     } catch (e) {
       const msg = humanizeError(e, "voc");
       if (st) { st.className = "voc-status err"; st.textContent = "失败：" + msg; }
-      toast("导入产品数据失败：" + msg, { duration: 4500 });
+      if (!silent) toast("导入产品数据失败：" + msg, { duration: 4500 });
     } finally {
       if (btn) btn.disabled = false;
     }
   }
 
-    async function importVoc() {
+  async function importVoc() {
     if (vocImporting) return;
     const inputEl = document.getElementById("voc-query");
     const btnEl = document.getElementById("btn-voc-import");
     const q = inputEl.value.trim();
     if (!q) { inputEl.focus(); return toast("请输入 ASIN（如 B0GVDS8X33）或 taskId"); }
     vocImporting = true;
+    if (sevenCollabRuntime.controller) {
+      try { sevenCollabRuntime.controller.abort("user"); } catch (_) {}
+      sevenCollabRuntime.busy = false;
+    }
     const st = document.getElementById("voc-import-status");
     const origBtnHtml = btnEl.innerHTML;
     btnEl.disabled = true;
@@ -1847,9 +2299,13 @@
     }, 1000);
 
     try {
+      const prevMode = state.mode;
+      const prevAsin = prevMode === "demo" ? "" : (state.asin || "").trim();
       const res = await API.post("/api/voc/import", { asin: q }, { timeoutMs: 45000 });
-      const prevAsin = state.asin;
       const nextAsin = res.asin || q;
+      const isDifferentAsin = prevMode === "demo" || prevAsin.toUpperCase() !== String(nextAsin).toUpperCase();
+
+      state.productSessionId = newSessionId();
       state.mode = "real";
       state.source = "amazon";
       state.asin = nextAsin;
@@ -1857,13 +2313,26 @@
       state.productName = res.productName || nextAsin;
       state.productDir = res.productDir || res.productName || nextAsin;
       state.archiveOverride = res.archive;
-      state.sevenImagePlan = res.sevenImagePlan || (res.archive && res.archive.sevenImagePlan) || null;
-      state.sevenPlanSource = res.sevenPlanSource || (res.archive && res.archive.sevenPlanSource) || null;
+      state.sevenImagePlan = res.sevenImagePlan || (res.archive && res.archive.sevenImagePlan) || [];
+      state.sevenPlanSource = res.sevenPlanSource || (res.archive && res.archive.sevenPlanSource) || "auto";
       state.sevenPlanAuthor = res.sevenPlanAuthor || (res.archive && res.archive.sevenPlanAuthor) || null;
       state.sevenPlanFile = res.sevenPlanFile || null;
-      state.sevenPlanStatus = res.sevenPlanStatus || (res.archive && res.archive.sevenPlanStatus) || null;
-      state.sevenPlanStatusLabel = res.sevenPlanStatusLabel || (res.archive && res.archive.sevenPlanStatusLabel) || null;
-      state.sevenThemeChat = state.sevenThemeChat || {};
+      state.sevenPlanStatus = res.sevenPlanStatus || (res.archive && res.archive.sevenPlanStatus) || "draft_pending";
+      state.sevenPlanStatusLabel = res.sevenPlanStatusLabel || (res.archive && res.archive.sevenPlanStatusLabel) || "待秋霜+安然规划";
+      state.sevenPlanStatusHint = res.sevenPlanStatusHint || null;
+      // Always reset per-card theme chat when importing VOC so prior product dialogue never leaks
+      state.sevenThemeChat = {};
+      state.sevenThemeBusy = {};
+
+      // Never carry over a previous product's pasted summary into a different ASIN!
+      if (isDifferentAsin) {
+        state.productSummary = "";
+        const taPd = document.getElementById("product-data-text");
+        if (taPd) taPd.value = "";
+        const stPd = document.getElementById("product-data-status");
+        if (stPd) stPd.textContent = "";
+      }
+
       state.planBoxes = (res.planBoxes || []).map((b) =>
         sanitizeCachedMainPlanBox(
           {
@@ -1874,8 +2343,9 @@
           state.productName
         )
       );
-      // If user already pasted 产品总结, re-merge so VOC + paste both feed planBoxes
-      if ((state.productSummary || "").trim()) {
+
+      // Only merge same-ASIN productSummary when NOT an authored gold plan (never overwrite 定稿优先!)
+      if (!isDifferentAsin && (state.productSummary || "").trim() && state.sevenPlanSource !== "authored") {
         try {
           const merged = await API.post(
             "/api/product-data/import",
@@ -1899,13 +2369,13 @@
               state.productName
             )
           );
-        } catch (_) {
-          /* keep VOC planBoxes if re-merge fails */
-        }
+        } catch (_) {}
       }
+
+      state.planOwnerSig = buildOwnerSig(state.asin, state.productName, state.productSummary);
       state.boxes = {};
       state.preview = [null, null, null, null, null, null, null];
-      if (prevAsin !== nextAsin) {
+      if (isDifferentAsin) {
         state.whitebgSources = [];
         state.whitebgSelectedSourceIds = [];
         state.whitebgSelectedSourceId = null;
@@ -1920,8 +2390,9 @@
       Object.keys(chatRuntime).forEach((k) => delete chatRuntime[k]);
       if (res.saved) state.lastSavePath = res.saved.category + "/" + res.saved.filename;
       saveState();
+      syncProductIdentityInputs();
       st.className = "voc-status ok";
-      st.textContent = `✓ 已导入 ${nextAsin} → 目录「${state.productDir}」（${state.planBoxes.length} 个规划框${state.activeWhitebgId ? " · 已载入历史白底图" : " · 请接着做白底真修"}）`;
+      st.textContent = `✓ 已导入 ${nextAsin} → 目录「${state.productDir}」（${state.planBoxes.length} 个规划框 · ${state.sevenPlanStatusLabel || "已就绪"}）`;
       setModeUI();
       renderArchive();
       if (WB) { WB.renderUploads(); WB.syncModelLabels(); WB.renderResults(); }
@@ -1930,6 +2401,11 @@
       renderUploadLib();
       refreshStatusQuiet();
       toast(`已导入 ${nextAsin} 真实 VOC 档案 → 产品目录「${state.productDir}」`);
+
+      // When no authored gold plan exists, automatically dispatch 秋霜+安然 collaborative planning!
+      if (state.sevenPlanSource !== "authored") {
+        runCollaborativeSevenPlan({ auto: true });
+      }
     } catch (e) {
       st.className = "voc-status err";
       const errMsg = humanizeError(e, "voc");
@@ -1945,10 +2421,12 @@
   }
 
   function backToDemo() {
+    abortAllInFlight();
+    Object.keys(state).forEach((k) => delete state[k]);
     Object.assign(state, defaultState());
-    Object.keys(boxRuntime).forEach((k) => delete boxRuntime[k]);
-    Object.keys(chatRuntime).forEach((k) => delete chatRuntime[k]);
     saveState();
+    syncProductIdentityInputs();
+    syncProductDataPanel();
     setModeUI();
     renderArchive();
     if (WB) { WB.renderUploads(); WB.syncModelLabels(); WB.renderResults(); }
@@ -2180,6 +2658,25 @@
     document.getElementById("voc-query").addEventListener("keydown", (e) => {
       if (e.key === "Enter") { e.preventDefault(); importVoc(); }
     });
+    const pniEl = document.getElementById("product-name-input");
+    if (pniEl) {
+      pniEl.addEventListener("input", () => {
+        const val = pniEl.value.trim();
+        if (state.mode === "demo" && val) {
+          state.mode = "real";
+          state.asin = "";
+          state.archiveOverride = null;
+          state.sevenImagePlan = [];
+          state.planBoxes = [];
+          state.sevenThemeChat = {};
+        }
+        state.productName = val;
+        state.productDir = val;
+        setModeUI();
+        saveStateDebounced();
+      });
+    }
+    syncProductIdentityInputs();
 
     const btnPd = document.getElementById("btn-product-data");
     const panelPd = document.getElementById("product-data-panel");
@@ -2266,7 +2763,7 @@
           return;
         }
         if (action === "send-seven-theme-chat") {
-          const idx = t.getAttribute("data-seven-idx");
+          const idx = btn.getAttribute("data-seven-idx");
           sendSevenThemeChat(idx);
           return;
         }
@@ -2410,6 +2907,10 @@
         const rt = boxRuntime[el.dataset.elapsedBox];
         if (rt && rt.busy) el.textContent = `已等待 ${Math.max(0, Math.floor((Date.now() - rt.startedAt) / 1000))}s`;
       });
+      const cEl = document.querySelector("[data-collab-elapsed]");
+      if (cEl && sevenCollabRuntime.busy) {
+        cEl.textContent = `已用 ${Math.max(0, Math.floor((Date.now() - sevenCollabRuntime.startedAt) / 1000))}s`;
+      }
       if (WB) WB.tickElapsed();
     }, 1000);
   }
@@ -2464,12 +2965,15 @@
   }
 
   async function init() {
+    const needsSummaryRefresh = !!state._needsRefreshFromSummary;
+    delete state._needsRefreshFromSummary;
+
     WB = window.BoardWhitebg.create({
       state, API, DEMO, GEN_PROVIDERS, MODEL_MAP,
       toast, humanizeError, escapeHtml, modelDisplayName,
       saveState, saveStateDebounced, setModeUI, renderPlans, renderPreview,
       ensureBox, currentPlans, findPlan, reconcilePreviewFlags, refreshStatusQuiet,
-      displayProductFolder, readFileAsDataURL,
+      displayProductFolder, readFileAsDataURL, effectiveAsin,
       onFinalArchived: async (meta) => {
         if (!Hist) return;
         try {
@@ -2484,6 +2988,7 @@
     Hist = window.BoardHistory.create({
       state, API, DEMO, toast, saveState, setModeUI,
       renderArchive, renderPlans, renderPreview, renderUploadLib, WB, escapeHtml,
+      abortAllInFlight,
     });
     reconcilePreviewFlags();
     await bootServer();
@@ -2496,6 +3001,10 @@
     renderPreview();
     renderUploadLib();
     bindGlobal();
+
+    if (needsSummaryRefresh && (state.productSummary || "").trim()) {
+      applyProductData({ silent: true });
+    }
   }
 
   init();

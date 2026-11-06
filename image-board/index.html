@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AI 做图看板</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23c45c26'/%3E%3Ctext x='32' y='43' font-size='30' text-anchor='middle' fill='%23fff' font-family='sans-serif'%3E图%3C/text%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="css/board.css?v=imgboard-13" />
+  <link rel="stylesheet" href="css/board.css?v=imgboard-15" />
 </head>
 <body>
   <div class="demo-banner" id="top-banner">
@@ -22,7 +22,7 @@
     <div class="header-actions">
       <a class="btn btn-ghost btn-sm" href="../tool/">← 总工作台</a>
       <span class="tag tag-demo" id="mode-tag">演示数据</span>
-      <button class="btn btn-primary btn-sm" id="btn-new-product" type="button" title="清空工作台，开始做新产品（历史仍保留）">给新产品做图</button>
+      <button class="btn btn-primary btn-sm" id="btn-new-product" type="button" title="先把预览图自动留到桌面产品文件夹，再归档历史并清空工作台">给新产品做图</button>
       <button class="btn btn-sm" id="btn-history" type="button" title="查看已留存的分析报告">历史记录</button>
       <button class="btn btn-ghost btn-sm" id="btn-save-history" type="button" title="把当前分析流程写入历史记录">保存分析报告</button>
       <button class="btn btn-ghost btn-sm" id="btn-demo-mode" type="button">切回演示数据</button>
@@ -51,19 +51,21 @@
       </div>
 
       <div class="voc-import-row" id="voc-import-row">
+        <label class="voc-label" for="product-name-input">产品名</label>
+        <input id="product-name-input" type="text" placeholder="新产品名称（桌面文件夹名，粘贴可自动识别）" />
         <label class="voc-label" for="voc-query">ASIN / taskId</label>
-        <input id="voc-query" type="text" placeholder="例：B0GVDS8X33 或 task UUID" list="voc-fixtures" />
+        <input id="voc-query" type="text" placeholder="例：B0GVDS8X33（无 ASIN 新品可留空）" list="voc-fixtures" />
         <datalist id="voc-fixtures"></datalist>
         <button class="btn btn-primary btn-sm" id="btn-voc-import" type="button">从 VOC 导入</button>
-        <button class="btn btn-sm" id="btn-product-data" type="button" title="粘贴产品总结，供下游出图 AI 分析并生成提示词">导入产品数据</button>
+        <button class="btn btn-sm" id="btn-product-data" type="button" title="粘贴新产品资料/消费者在意点，秋霜+安然自动针对当前产品规划七图">导入产品数据</button>
         <span id="voc-import-status" class="voc-status"></span>
       </div>
       <div class="product-data-panel" id="product-data-panel" hidden>
         <div class="product-data-head">
-          <strong>导入产品数据</strong>
-          <span class="hint">粘贴产品总结 / 消费者在意点；写入规划框 brief/prompt，供下游出图 AI 分析。可与 VOC 并存（粘贴点优先，VOC 补充）。</span>
+          <strong>导入产品数据（自动触发秋霜+安然针对当前产品规划七图）</strong>
+          <span class="hint">粘贴新产品定位 / 规格尺寸 / 使用场景 / 痛点与爽点（支持 Markdown 标题或列表）；自动识别产品名并隔离上一产品旧内容。</span>
         </div>
-        <textarea id="product-data-text" rows="6" placeholder="例：&#10;消费者在意点：&#10;- 辅助艺术治疗&#10;- 方便放在书桌、方便拿取&#10;- 放松心情（瑜伽 / 冥想 / 焦虑时使用）&#10;痛点：印刷质量差；尺寸比预期小"></textarea>
+        <textarea id="product-data-text" rows="6" placeholder="例：&#10;产品名称：XXX&#10;消费者在意点：&#10;- 核心材质与做工卖点&#10;- 真实尺寸规格与摆放场景&#10;- 核心使用场景与目标人群&#10;痛点：竞品常见差评顾虑&#10;爽点：开箱与高频使用惊喜点"></textarea>
         <div class="product-data-actions">
           <button class="btn btn-primary btn-sm" id="btn-product-data-apply" type="button">应用到规划框</button>
           <button class="btn btn-ghost btn-sm" id="btn-product-data-clear" type="button">清空</button>
@@ -247,7 +249,7 @@
         <h2>历史记录 · 产品分析报告</h2>
         <button type="button" class="btn btn-ghost btn-sm" id="btn-history-close">关闭</button>
       </div>
-      <p class="history-lead">白底图与最终版本落在「产品名」文件夹；完整分析流程报告在此回看。点「给新产品做图」会清空当前工作台，不删历史。</p>
+      <p class="history-lead">白底图与最终版本落在桌面「产品名」文件夹；完整分析流程报告在此回看。点「给新产品做图」会先自动把预览图写入桌面产品文件夹，再归档历史并清空工作台。</p>
       <div class="history-body">
         <div class="history-list" id="history-list"></div>
         <div class="history-detail" id="history-detail"></div>
@@ -257,11 +259,11 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="js/api-config.js?v=imgboard-13"></script>
-  <script src="js/api.js?v=imgboard-13"></script>
-  <script src="js/demo-data.js?v=imgboard-13"></script>
-  <script src="js/whitebg.js?v=imgboard-13"></script>
-  <script src="js/history.js?v=imgboard-13"></script>
-  <script src="js/app.js?v=imgboard-13"></script>
+  <script src="js/api-config.js?v=imgboard-15"></script>
+  <script src="js/api.js?v=imgboard-15"></script>
+  <script src="js/demo-data.js?v=imgboard-15"></script>
+  <script src="js/whitebg.js?v=imgboard-15"></script>
+  <script src="js/history.js?v=imgboard-15"></script>
+  <script src="js/app.js?v=imgboard-15"></script>
 </body>
 </html>

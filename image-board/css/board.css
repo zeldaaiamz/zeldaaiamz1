@@ -1998,3 +1998,45 @@ img[data-lightbox-src] {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ===== New-product input + 秋霜/安然协同规划状态栏 (imgboard-15) ===== */
+#product-name-input {
+  flex: 0.9;
+  min-width: 190px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-family: inherit;
+  font-size: 13px;
+  background: #fff;
+}
+.seven-plan-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.tag-collab {
+  background: #eef6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+.seven-collab-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  border-radius: 8px;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  color: #0c4a6e;
+  font-size: 12.5px;
+}
+.seven-collab-banner .lhs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

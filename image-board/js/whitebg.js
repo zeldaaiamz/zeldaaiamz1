@@ -23,7 +23,9 @@ window.BoardWhitebg = {
       displayProductFolder,
       readFileAsDataURL,
       onFinalArchived,
+      effectiveAsin,
     } = ctx;
+    const getAsin = typeof effectiveAsin === "function" ? effectiveAsin : () => (state.mode === "demo" ? DEMO.product.asin : (state.asin || "").trim());
 
     let boardPickerOpen = false;
     let previewSyncing = false;
@@ -393,8 +395,8 @@ window.BoardWhitebg = {
           const res = await API.post(
             "/api/upload",
             {
-              asin: state.asin || DEMO.product.asin,
-              productName: state.productName || "",
+              asin: getAsin() || "UPLOAD",
+              productName: state.mode === "demo" ? (state.productName || "") : (state.productName || ""),
               boxId: "whitebg-src",
               kind: "whitebg-upload",
               filename: f.name,
@@ -514,7 +516,7 @@ window.BoardWhitebg = {
               "/api/whitebg",
               {
                 provider: "doubao",
-                asin: state.asin || DEMO.product.asin,
+                asin: getAsin() || "NOASIN",
                 productName: state.productName || "",
                 sourceImageUrl: src.imageUrl,
                 instruction: state.whitebgInstruction || "",
@@ -585,17 +587,36 @@ window.BoardWhitebg = {
       }
     }
 
+    function classifyPreviewKind(it) {
+      if (!it) return "final";
+      const model = String(it.model || "").toLowerCase();
+      const stage = String(it.stageDir || "").trim();
+      const label = String(it.label || it.title || "");
+      // 明确白底基准图 → 白底图/；其余预览定稿 → 最终版本/（绝不塞过程图）
+      if (stage === "白底图") return "whitebg-pick";
+      if (model === "whitebg" || model === "whitebg-pick" || model === "whitebg-retouch") return "whitebg-pick";
+      if (/白底真修|精修白底|纯白底/.test(label)) return "whitebg-pick";
+      return "final";
+    }
+
     async function syncPreviewToFinal(opts) {
       const silent = !!(opts && opts.silent);
+      const skipArchive = !!(opts && opts.skipArchive);
+      const reason = (opts && opts.reason) || "";
       const items = [];
+      const kindCounts = { final: 0, whitebg: 0 };
       (state.preview || []).forEach((it, idx) => {
         if (it && it.imageUrl) {
+          const kind = classifyPreviewKind(it);
+          if (kind === "whitebg-pick") kindCounts.whitebg += 1;
+          else kindCounts.final += 1;
           items.push({
             slot: idx + 1,
             boxId: it.boxId,
             model: it.model,
             version: it.version || 1,
             imageUrl: it.imageUrl,
+            kind,
           });
         }
       });
@@ -603,23 +624,29 @@ window.BoardWhitebg = {
       if (!items.length) {
         if (!silent) toast("预览框中暂无可定稿的图片");
         if (stEl) stEl.textContent = "";
-        return;
+        return { ok: false, empty: true, count: 0, reason: "empty" };
       }
-      if (previewSyncing) return;
+      if (previewSyncing) return { ok: false, busy: true, count: 0, reason: "busy" };
       previewSyncing = true;
       const btn = document.getElementById("btn-sync-final");
       if (btn) btn.disabled = true;
       if (stEl) {
         stEl.className = "voc-status";
-        stEl.innerHTML = `<span class="spinner"></span> 正在同步至「最终版本/」…`;
+        const destHint = kindCounts.whitebg && !kindCounts.final
+          ? "白底图/"
+          : kindCounts.whitebg
+            ? "最终版本/ + 白底图/"
+            : "最终版本/";
+        stEl.innerHTML = `<span class="spinner"></span> 正在同步至「${destHint}」…`;
       }
       try {
         const res = await API.post(
           "/api/preview/save",
           {
-            asin: state.asin || DEMO.product.asin,
+            asin: getAsin() || "NOASIN",
             productName: state.productName || "",
             items,
+            reason: reason || undefined,
           },
           { timeoutMs: 45000 }
         );
@@ -628,25 +655,40 @@ window.BoardWhitebg = {
         saveState();
         setModeUI();
         refreshStatusQuiet();
+        const finalN = (res.finalCount != null) ? res.finalCount : kindCounts.final;
+        const wbN = (res.whitebgCount != null) ? res.whitebgCount : kindCounts.whitebg;
+        let destText = `${res.productDir || displayProductFolder()}/最终版本/`;
+        if (wbN && finalN) destText = `${res.productDir || displayProductFolder()}/{最终版本 ${finalN} · 白底图 ${wbN}}`;
+        else if (wbN && !finalN) destText = `${res.productDir || displayProductFolder()}/白底图/`;
         if (stEl) {
           stEl.className = "voc-status ok";
-          stEl.textContent = `✓ 已写入「${res.productDir || displayProductFolder()}/最终版本/」共 ${res.count} 张（2000×2000）`;
+          stEl.textContent = `✓ 已写入「${destText}」共 ${res.count} 张（2000×2000 · 已入 Mac 同步队列）`;
         }
         if (!silent) {
-          toast(`已定稿 ${res.count} 张图片至「${res.productDir || displayProductFolder()}/最终版本/」`);
+          toast(`已定稿 ${res.count} 张至桌面产品文件夹「${destText}」`);
         }
-        // Only archive analysis report on explicit「同步定稿」; silent DnD sync skips history write
-        if (!silent && typeof onFinalArchived === "function") {
+        // Only archive on explicit「同步定稿」; silent / new-product skipArchive 由调用方自行写历史
+        if (!silent && !skipArchive && typeof onFinalArchived === "function") {
           try {
             await onFinalArchived({ silent: false, count: res.count, productDir: res.productDir });
           } catch (_) {}
         }
+        return {
+          ok: true,
+          count: res.count || 0,
+          productDir: res.productDir,
+          queuedNew: res.queuedNew || 0,
+          finalCount: finalN,
+          whitebgCount: wbN,
+          items: res.items || [],
+        };
       } catch (e) {
         if (stEl) {
           stEl.className = "voc-status err";
           stEl.textContent = "定稿写入失败：" + humanizeError(e, "preview");
         }
         if (!silent) toast("定稿同步失败：" + humanizeError(e, "preview"));
+        return { ok: false, error: humanizeError(e, "preview"), count: 0 };
       } finally {
         previewSyncing = false;
         if (btn) btn.disabled = false;
@@ -960,6 +1002,16 @@ window.BoardWhitebg = {
       syncPreviewToFinal,
       bindEvents,
       tickElapsed,
+      abortInFlight() {
+        if (runtime.controller) {
+          try { runtime.controller.abort("user"); } catch (_) {}
+        }
+        runtime.busy = false;
+        runtime.controller = null;
+        runtime.text = "";
+        runtime.lastError = null;
+        boardPickerOpen = false;
+      },
     };
   },
 };
