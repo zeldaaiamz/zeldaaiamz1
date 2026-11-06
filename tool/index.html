@@ -29,6 +29,7 @@
           <option value="../voc/">用户洞察VOC</option>
           <option value="https://zeldaaiamz.github.io/etsy-analyzer/#">选品雷达</option>
           <option value="https://zeldaaiamz.github.io/zeldaaiamz1/root-finder/">sif选赛道</option>
+          <option value="https://zeldaaiamz.github.io/zeldaaiamz1/image-board/">AI做图看板</option>
         </select>
         <svg aria-hidden="true" viewBox="0 0 20 20"><path d="m5 7 5 5 5-5"/></svg>
       </div>
@@ -113,7 +114,7 @@
     document.getElementById('tool-switcher').addEventListener('change', function () {
       const target = this.value;
       this.value = './';
-      if (['../voc/', 'https://zeldaaiamz.github.io/etsy-analyzer/#', 'https://zeldaaiamz.github.io/zeldaaiamz1/root-finder/'].includes(target)) {
+      if (['../voc/', 'https://zeldaaiamz.github.io/etsy-analyzer/#', 'https://zeldaaiamz.github.io/zeldaaiamz1/root-finder/', 'https://zeldaaiamz.github.io/zeldaaiamz1/image-board/'].includes(target)) {
         window.open(target, '_blank', 'noopener,noreferrer');
       }
     });

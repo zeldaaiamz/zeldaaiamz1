@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI 做图看板</title>
+  <link rel="stylesheet" href="css/board.css?v=imgboard-1" />
+</head>
+<body>
+  <div class="demo-banner" id="top-banner">
+    <span id="banner-mode">演示数据模式</span>
+    <span id="banner-detail">· 图保存至 Mac「亚马逊产品图片」· 豆包 / Banana 可用 · ChatGPT 额度不足时会提示</span>
+  </div>
+
+  <header class="app-header">
+    <div>
+      <h1>AI 做图看板</h1>
+      <div class="sub" id="product-sub">亚马逊 7 图 Listing 树状流程 · 可导入真实 VOC 或使用演示数据</div>
+      <div class="save-path" id="save-path">落盘：Mac Desktop/亚马逊产品图片／（分类子文件夹）</div>
+    </div>
+    <div class="header-actions">
+      <a class="btn btn-ghost btn-sm" href="../tool/">← 总工作台</a>
+      <span class="tag tag-demo" id="mode-tag">演示数据</span>
+      <button class="btn btn-ghost btn-sm" id="btn-demo-mode">切回演示数据</button>
+      <button class="btn btn-ghost btn-sm" id="btn-reset" title="清空本机状态">重置状态</button>
+      <button class="btn btn-sm" id="btn-jump-preview">跳到预览框 ↓</button>
+    </div>
+  </header>
+
+  <main class="board">
+    <!-- Layer 1 -->
+    <section class="layer" id="layer-archive">
+      <div class="layer-arrow"></div>
+      <div class="layer-head">
+        <div class="layer-num">1</div>
+        <h2>产品档案预处理入库</h2>
+        <span class="tag tag-demo" data-mode-tag>演示数据</span>
+        <div class="hint">来源切换 → 档案卡片 → 修白底图 → 勾选入库</div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <span style="font-size:13px;color:var(--ink-soft);">档案来源</span>
+        <div class="source-toggle" id="source-toggle" role="tablist">
+          <button type="button" class="active" data-source="amazon" role="tab">亚马逊 VOC</button>
+          <button type="button" data-source="etsy" role="tab">Etsy 评论分析</button>
+          <button type="button" data-source="demo" role="tab">演示数据</button>
+        </div>
+        <span id="source-label" style="font-size:12px;color:var(--muted);"></span>
+      </div>
+
+      <div class="voc-import-row" id="voc-import-row">
+        <label class="voc-label">ASIN / taskId</label>
+        <input id="voc-query" type="text" placeholder="例：B0GVDS8X33 或 task UUID" list="voc-fixtures" />
+        <datalist id="voc-fixtures"></datalist>
+        <button class="btn btn-primary btn-sm" id="btn-voc-import">从 VOC 导入</button>
+        <span id="voc-import-status" class="voc-status"></span>
+      </div>
+      <div id="provider-status" class="provider-status"></div>
+
+      <div class="section-block" id="upload-library">
+        <h3>自有图入库 <span class="tag">外源上传</span></h3>
+        <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">把别处生成的图上传到「亚马逊产品图片」分类目录，挂到对应规划框，可再精改、加入预览。</p>
+        <div class="upload-lib-row">
+          <label>分类
+            <select id="upload-kind">
+              <option value="main">主图</option>
+              <option value="detail">细节图</option>
+              <option value="size">尺寸图</option>
+              <option value="scene-1">场景图1</option>
+              <option value="scene-2">场景图2</option>
+              <option value="scene-3">场景图3</option>
+              <option value="scene-4">场景图4</option>
+              <option value="scene-5">场景图5</option>
+              <option value="scene-6">场景图6</option>
+              <option value="scene-7">场景图7</option>
+              <option value="refine">精改版本</option>
+            </select>
+          </label>
+          <label class="file-btn">选择图片
+            <input type="file" id="upload-files" accept="image/png,image/jpeg,image/webp,image/jpg" multiple hidden />
+          </label>
+          <button class="btn btn-primary btn-sm" id="btn-upload-own" type="button">上传入库</button>
+          <span id="upload-status" class="voc-status"></span>
+        </div>
+        <div class="upload-lib-thumbs" id="upload-lib-thumbs"></div>
+      </div>
+
+      <div class="archive-grid" id="archive-grid"></div>
+
+      <div class="section-block" id="whitebg-section">
+        <h3>白底图预处理 <span class="tag tag-demo">演示数据</span></h3>
+        <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">用户上传产品白底图 1…n → 勾选大模型修图 → 对比结果 → 勾选优选入库</p>
+
+        <div class="whitebg-upload" id="whitebg-uploads"></div>
+
+        <div class="model-pick" id="whitebg-models">
+          <span style="font-size:13px;color:var(--ink-soft);">修白底图模型：</span>
+          <label data-model="chatgpt"><input type="checkbox" value="chatgpt" checked /> ChatGPT</label>
+          <label data-model="banana" class="checked"><input type="checkbox" value="banana" checked /> Banana</label>
+          <label data-model="doubao"><input type="checkbox" value="doubao" /> 豆包</label>
+          <button class="btn btn-primary btn-sm" id="btn-fix-whitebg">开始修白底图（模拟）</button>
+        </div>
+
+        <div class="whitebg-results" id="whitebg-results"></div>
+
+        <div class="saved-bar" id="whitebg-saved">
+          ✓ 已勾选白底图，存入本地文件夹/库（演示：写入 localStorage）
+        </div>
+      </div>
+    </section>
+
+    <!-- Layer 2 -->
+    <section class="layer" id="layer-plan">
+      <div class="layer-arrow"></div>
+      <div class="layer-head">
+        <div class="layer-num">2</div>
+        <h2>图片规划</h2>
+        <span class="tag tag-demo" data-mode-tag>演示数据</span>
+        <div class="hint">档案 + 已选白底图 → 安然场景图 / 秋霜主图·细节·尺寸 · 每框含文字策划 + 生图提示词</div>
+      </div>
+
+      <div class="plan-tracks">
+        <div class="track" id="track-qiushuang">
+          <div class="track-head">
+            <span class="badge badge-qiushuang">秋霜</span>
+            <span class="who">主图 · 细节图 · 尺寸图</span>
+            <span class="role">产品占比 / 细节焦点 / 对比物</span>
+          </div>
+          <div id="boxes-qiushuang"></div>
+        </div>
+        <div class="track" id="track-anran">
+          <div class="track-head">
+            <span class="badge badge-anran">安然</span>
+            <span class="who">场景图策划</span>
+            <span class="role">视觉语言呈现档案要点</span>
+          </div>
+          <div id="boxes-anran"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Layer 3 note: generation is inside boxes; refine is branch -->
+    <section id="layer-gen-note" class="layer layer-lite">
+      <div class="layer-arrow"></div>
+      <div class="layer-head">
+        <div class="layer-num">3</div>
+        <h2>多模型生成 + 精改支线</h2>
+        <span class="tag tag-demo">演示数据</span>
+        <div class="hint">在上方每个图片框内点「生成图片」框选模型；精改在框内支线对话产出 v2 / v3</div>
+      </div>
+      <p style="margin:0;font-size:13px;color:var(--ink-soft);">
+        操作说明：打开任一图片框 → <strong>生成图片</strong> → 勾选 Banana / 豆包（推荐）或 ChatGPT →
+        <strong>只勾选一张</strong> → 若不满意点 <strong>精改支线</strong> 改提示词并优化出新版本 → 再勾选。
+        勾选结果后可点 <strong>加入预览</strong>。
+      </p>
+      <div id="gen-summary" style="margin-top:12px;font-size:12px;color:var(--muted);"></div>
+    </section>
+
+    <!-- Layer 4 Preview -->
+    <section class="layer" id="layer-preview">
+      <div class="layer-arrow"></div>
+      <div class="layer-head">
+        <div class="layer-num">4</div>
+        <h2>预览框 · 亚马逊 7 图顺序</h2>
+        <span class="tag tag-demo">演示数据</span>
+        <div class="hint">从上层勾选加入 · 拖拽调序 · 增删</div>
+      </div>
+
+      <div class="preview-toolbar">
+        <button class="btn btn-sm" id="btn-auto-fill">一键填入已选图（演示）</button>
+        <button class="btn btn-ghost btn-sm" id="btn-clear-preview">清空预览</button>
+        <span style="font-size:12px;color:var(--muted);">拖拽卡片可改顺序 · 状态自动写入 localStorage</span>
+      </div>
+
+      <div class="preview-slots" id="preview-slots"></div>
+    </section>
+  </main>
+
+  <p class="footer-note">
+    AI 做图看板 · <a href="../tool/">← 总工作台</a> ·
+    落盘 Mac「亚马逊产品图片」· 后端 <code>/image-board-api</code>
+  </p>
+
+  <!-- Generate modal -->
+  <div class="modal-backdrop" id="gen-modal" role="dialog" aria-modal="true">
+    <div class="modal">
+      <h3>选择生图模型</h3>
+      <p id="gen-modal-desc">勾选模型。豆包 / Banana 优先；ChatGPT 若额度不足会明确提示。</p>
+      <div class="modal-models" id="gen-modal-models">
+        <label data-model="banana" class="checked"><input type="checkbox" value="banana" checked /> Banana（Gemini）</label>
+        <label data-model="doubao" class="checked"><input type="checkbox" value="doubao" checked /> 豆包</label>
+        <label data-model="chatgpt"><input type="checkbox" value="chatgpt" /> ChatGPT</label>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" id="gen-modal-cancel">取消</button>
+        <button class="btn btn-primary" id="gen-modal-ok">开始生成</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="js/api-config.js?v=imgboard-1"></script>
+  <script src="js/api.js?v=imgboard-1"></script>
+  <script src="js/demo-data.js?v=imgboard-1"></script>
+  <script src="js/app.js?v=imgboard-1"></script>
+</body>
+</html>
