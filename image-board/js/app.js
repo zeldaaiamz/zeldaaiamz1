@@ -1367,7 +1367,7 @@
 
         try {
           const nextVer = Math.max(0, ...box.results.map((r) => cardEffectiveVersion(r))) + 1;
-          const perModelTimeout = mid === "banana" ? 56000 : 150000;
+          const perModelTimeout = mid === "banana" ? 100000 : 180000;
           const res = await API.post(
             "/api/generate",
             {
@@ -1498,7 +1498,7 @@
           version: nextVer,
           kind: inferKind(boxId) === "main" ? "main" : "refine",
         },
-        { timeoutMs: targetProvider === "banana" ? 56000 : 150000, signal: ctrl.signal }
+        { timeoutMs: targetProvider === "banana" ? 100000 : 180000, signal: ctrl.signal }
       );
       const id = `${boxId}-${targetProvider}-v${nextVer}-${Date.now()}`;
       box.results.push({
