@@ -1,4 +1,4 @@
-/* AI 做图看板 v5 — 豆包批量白底真修 + 单/多选挂框 + v3/v6多图i2i + 秋霜/安然提示词对话 + 全局页内灯箱 + 预览下载 */
+/* AI 做图看板 v5 — 白底/定稿留稿 + 历史报告 + 给新产品做图清空工作台 + 豆包/多模型生图 */
 (function () {
   const STORAGE_KEY = "ai-image-board-v3";
   const LEGACY_KEY = "ai-image-board-v2";
@@ -14,6 +14,7 @@
   const boxRuntime = {};
   const chatRuntime = {};
   let WB = null;
+  let Hist = null;
   let lastDragEndAt = 0;
 
   function defaultState() {
@@ -192,6 +193,16 @@
     return "API_KEY";
   }
 
+  function isBlankNewProduct() {
+    return (
+      state.mode === "real" &&
+      !(state.asin || "").trim() &&
+      !(state.productName || "").trim() &&
+      !state.archiveOverride &&
+      !(state.productSummary || "").trim()
+    );
+  }
+
   function displayProductFolder() {
     if (state.productDir) return state.productDir;
     const raw = (state.productName || state.asin || DEMO.product.name || "未命名产品").trim();
@@ -279,6 +290,7 @@
     if (isRealMode() && state.planBoxes && state.planBoxes.length) return state.planBoxes;
     if (state.planBoxes && state.planBoxes.length && state.mode === "real") return state.planBoxes;
     if (state.planBoxes && state.planBoxes.length && state.productSummary) return state.planBoxes;
+    if (isBlankNewProduct()) return [];
     return [...DEMO.qiushuang, ...DEMO.anran];
   }
 
@@ -417,7 +429,7 @@
     banner.classList.toggle("banner-real", real || hasRealWb);
     document.getElementById("banner-mode").textContent = real ? "真实 VOC / 受控图生图模式" : "演示档案模式（支持白底真修与受控生图）";
     document.getElementById("banner-detail").textContent =
-      "· 目录：亚马逊产品图片/" + displayProductFolder() + "/{过程图|白底图|最终版本} · 全量 2000×2000 PNG/JPG · 强制锁定白底本体";
+      "· 目录：亚马逊产品图片/" + displayProductFolder() + "/{过程图|白底图|最终版本|报告} · 全量 2000×2000 PNG/JPG · 强制锁定白底本体";
 
     const modeTag = document.getElementById("mode-tag");
     if (modeTag) {
@@ -445,22 +457,29 @@
       syncSummary = sq.pending > 0 ? ` · 待同步 Mac ${sq.pending} 项` : sq.syncedCount > 0 ? ` · 已同步 Mac ${sq.syncedCount} 项` : "";
     }
     document.getElementById("save-path").textContent =
-      `落盘：${mac}/${displayProductFolder()}/{过程图 | 白底图 | 最终版本}（2000×2000 .png/.jpg）` +
+      `落盘：${mac}/${displayProductFolder()}/{过程图 | 白底图 | 最终版本 | 报告}（2000×2000 .png/.jpg）` +
       (state.lastSavePath ? ` · 最近：${state.lastSavePath}` : "") +
       syncSummary;
 
-    document.getElementById("product-sub").textContent = real
+    const emptyNew = isBlankNewProduct();
+    document.getElementById("product-sub").textContent = emptyNew
+      ? "新产品工作台（已清空）· 请导入 ASIN / 粘贴产品数据；历史记录可回看旧稿"
+      : real
       ? `亚马逊 7 图 · ASIN ${state.asin || "—"} · 产品目录「${displayProductFolder()}」`
       : `亚马逊 7 图 Listing · 当前演示档案：${DEMO.product.name}（可导入真实 ASIN 如 B0GVDS8X33）`;
   }
 
   function activeArchive() {
     if (state.archiveOverride) return state.archiveOverride;
+    if (isBlankNewProduct()) {
+      return { itch: [], pain: [], delight: [], reason: [], sevenImagePlan: [] };
+    }
     return DEMO.archives.amazon;
   }
 
   function activeSevenPlan() {
     if (Array.isArray(state.sevenImagePlan) && state.sevenImagePlan.length) return state.sevenImagePlan;
+    if (isBlankNewProduct()) return null;
     const arch = activeArchive();
     if (arch && Array.isArray(arch.sevenImagePlan) && arch.sevenImagePlan.length) return arch.sevenImagePlan;
     return null;
@@ -2375,8 +2394,10 @@
       }
     });
     document.getElementById("btn-reset").addEventListener("click", () => {
+      if (!window.confirm("清空当前工作台本机状态？历史记录不会删除。")) return;
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(LEGACY_KEY);
+      // keep HISTORY_KEY
       location.reload();
     });
     document.getElementById("btn-jump-preview").addEventListener("click", () => {
@@ -2410,7 +2431,7 @@
         .join("") +
       `<span class="provider-pill live">白底真修：豆包专用</span>` +
       `<span class="provider-pill live">规格：2000×2000 PNG/JPG</span>` +
-      `<span class="provider-pill">目录 → ~/Desktop/亚马逊产品图片/{产品名}/{过程图|白底图|最终版本}（${escapeHtml(syncText)}）</span>`;
+      `<span class="provider-pill">目录 → ~/Desktop/亚马逊产品图片/{产品名}/{过程图|白底图|最终版本|报告}（${escapeHtml(syncText)}）</span>`;
   }
 
   async function bootServer() {
@@ -2449,6 +2470,20 @@
       saveState, saveStateDebounced, setModeUI, renderPlans, renderPreview,
       ensureBox, currentPlans, findPlan, reconcilePreviewFlags, refreshStatusQuiet,
       displayProductFolder, readFileAsDataURL,
+      onFinalArchived: async (meta) => {
+        if (!Hist) return;
+        try {
+          await Hist.saveCurrent({
+            status: "final-synced",
+            note: (meta && meta.note) || "定稿同步后自动留存分析报告",
+            silent: !!(meta && meta.silent),
+          });
+        } catch (_) {}
+      },
+    });
+    Hist = window.BoardHistory.create({
+      state, API, DEMO, toast, saveState, setModeUI,
+      renderArchive, renderPlans, renderPreview, renderUploadLib, WB, escapeHtml,
     });
     reconcilePreviewFlags();
     await bootServer();

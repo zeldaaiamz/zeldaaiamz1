@@ -5,25 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AI 做图看板</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23c45c26'/%3E%3Ctext x='32' y='43' font-size='30' text-anchor='middle' fill='%23fff' font-family='sans-serif'%3E图%3C/text%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="css/board.css?v=imgboard-12" />
+  <link rel="stylesheet" href="css/board.css?v=imgboard-13" />
 </head>
 <body>
   <div class="demo-banner" id="top-banner">
     <span id="banner-mode">演示数据模式</span>
-    <span id="banner-detail">· 落盘 Mac「亚马逊产品图片/{产品名}/{过程图|白底图|最终版本}」· 全量 2000×2000 PNG/JPG · 强制白底基准防魔改</span>
+    <span id="banner-detail">· 落盘 Mac「亚马逊产品图片/{产品名}/{过程图|白底图|最终版本|报告}」· 全量 2000×2000 PNG/JPG · 强制白底基准防魔改</span>
   </div>
 
   <header class="app-header">
     <div>
       <h1>AI 做图看板</h1>
       <div class="sub" id="product-sub">亚马逊 7 图 Listing 树状流程 · 白底真修锁定产品本体 → 多模型受控图生图 → 定稿落盘</div>
-      <div class="save-path" id="save-path">落盘：Mac Desktop/亚马逊产品图片/{产品名}/{过程图 | 白底图 | 最终版本}（2000×2000 .png/.jpg）</div>
+      <div class="save-path" id="save-path">落盘：Mac Desktop/亚马逊产品图片/{产品名}/{过程图 | 白底图 | 最终版本 | 报告}（2000×2000 .png/.jpg）</div>
     </div>
     <div class="header-actions">
       <a class="btn btn-ghost btn-sm" href="../tool/">← 总工作台</a>
       <span class="tag tag-demo" id="mode-tag">演示数据</span>
+      <button class="btn btn-primary btn-sm" id="btn-new-product" type="button" title="清空工作台，开始做新产品（历史仍保留）">给新产品做图</button>
+      <button class="btn btn-sm" id="btn-history" type="button" title="查看已留存的分析报告">历史记录</button>
+      <button class="btn btn-ghost btn-sm" id="btn-save-history" type="button" title="把当前分析流程写入历史记录">保存分析报告</button>
       <button class="btn btn-ghost btn-sm" id="btn-demo-mode" type="button">切回演示数据</button>
-      <button class="btn btn-ghost btn-sm" id="btn-reset" type="button" title="清空本机状态">重置状态</button>
+      <button class="btn btn-ghost btn-sm" id="btn-reset" type="button" title="清空本机工作台状态（不含历史记录）">重置状态</button>
       <button class="btn btn-sm" id="btn-jump-preview" type="button">跳到预览框 ↓</button>
     </div>
   </header>
@@ -184,7 +187,7 @@
 
       <div class="preview-toolbar">
         <button class="btn btn-sm" id="btn-auto-fill" type="button">一键填入已选图</button>
-        <button class="btn btn-primary btn-sm" id="btn-sync-final" type="button">同步定稿至「最终版本/」</button>
+        <button class="btn btn-primary btn-sm" id="btn-sync-final" type="button">同步定稿至「最终版本/」并留稿</button>
         <button class="btn btn-sm" id="btn-download-all-preview" type="button">下载全部预览图</button>
         <button class="btn btn-ghost btn-sm" id="btn-clear-preview" type="button">清空预览</button>
         <span id="preview-sync-status" class="voc-status"></span>
@@ -196,7 +199,7 @@
 
   <p class="footer-note">
     AI 做图看板 · <a href="../tool/">← 总工作台</a> ·
-    落盘 Mac「亚马逊产品图片/{产品名}/{过程图|白底图|最终版本}」（2000×2000 PNG/JPG）· 后端 <code>/image-board-api</code>
+    落盘 Mac「亚马逊产品图片/{产品名}/{过程图|白底图|最终版本|报告}」（2000×2000 PNG/JPG）· 后端 <code>/image-board-api</code>
   </p>
 
   <!-- Generate modal -->
@@ -236,12 +239,29 @@
     </div>
   </div>
 
+
+  <!-- History panel -->
+  <div class="history-backdrop" id="history-panel" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-label="历史记录">
+    <div class="history-modal">
+      <div class="history-modal-head">
+        <h2>历史记录 · 产品分析报告</h2>
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-history-close">关闭</button>
+      </div>
+      <p class="history-lead">白底图与最终版本落在「产品名」文件夹；完整分析流程报告在此回看。点「给新产品做图」会清空当前工作台，不删历史。</p>
+      <div class="history-body">
+        <div class="history-list" id="history-list"></div>
+        <div class="history-detail" id="history-detail"></div>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
-  <script src="js/api-config.js?v=imgboard-12"></script>
-  <script src="js/api.js?v=imgboard-12"></script>
-  <script src="js/demo-data.js?v=imgboard-12"></script>
-  <script src="js/whitebg.js?v=imgboard-12"></script>
-  <script src="js/app.js?v=imgboard-12"></script>
+  <script src="js/api-config.js?v=imgboard-13"></script>
+  <script src="js/api.js?v=imgboard-13"></script>
+  <script src="js/demo-data.js?v=imgboard-13"></script>
+  <script src="js/whitebg.js?v=imgboard-13"></script>
+  <script src="js/history.js?v=imgboard-13"></script>
+  <script src="js/app.js?v=imgboard-13"></script>
 </body>
 </html>

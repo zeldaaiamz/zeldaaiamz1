@@ -22,6 +22,7 @@ window.BoardWhitebg = {
       refreshStatusQuiet,
       displayProductFolder,
       readFileAsDataURL,
+      onFinalArchived,
     } = ctx;
 
     let boardPickerOpen = false;
@@ -633,6 +634,12 @@ window.BoardWhitebg = {
         }
         if (!silent) {
           toast(`已定稿 ${res.count} 张图片至「${res.productDir || displayProductFolder()}/最终版本/」`);
+        }
+        // Only archive analysis report on explicit「同步定稿」; silent DnD sync skips history write
+        if (!silent && typeof onFinalArchived === "function") {
+          try {
+            await onFinalArchived({ silent: false, count: res.count, productDir: res.productDir });
+          } catch (_) {}
         }
       } catch (e) {
         if (stEl) {
