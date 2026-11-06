@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AI 做图看板</title>
-  <link rel="stylesheet" href="css/board.css?v=imgboard-1" />
+  <link rel="stylesheet" href="css/board.css?v=imgboard-2" />
 </head>
 <body>
   <div class="demo-banner" id="top-banner">
@@ -49,10 +49,10 @@
       </div>
 
       <div class="voc-import-row" id="voc-import-row">
-        <label class="voc-label">ASIN / taskId</label>
+        <label class="voc-label" for="voc-query">ASIN / taskId</label>
         <input id="voc-query" type="text" placeholder="例：B0GVDS8X33 或 task UUID" list="voc-fixtures" />
         <datalist id="voc-fixtures"></datalist>
-        <button class="btn btn-primary btn-sm" id="btn-voc-import">从 VOC 导入</button>
+        <button class="btn btn-primary btn-sm" id="btn-voc-import" type="button">从 VOC 导入</button>
         <span id="voc-import-status" class="voc-status"></span>
       </div>
       <div id="provider-status" class="provider-status"></div>
@@ -88,23 +88,23 @@
       <div class="archive-grid" id="archive-grid"></div>
 
       <div class="section-block" id="whitebg-section">
-        <h3>白底图预处理 <span class="tag tag-demo">演示数据</span></h3>
-        <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">用户上传产品白底图 1…n → 勾选大模型修图 → 对比结果 → 勾选优选入库</p>
+        <h3>白底图预处理 <span class="tag tag-mock" id="whitebg-mode-tag">模拟预览</span></h3>
+        <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">用户上传产品白底图 1…n → 勾选大模型修图 → 对比结果 → 勾选优选入库（当前为流程模拟）</p>
 
         <div class="whitebg-upload" id="whitebg-uploads"></div>
 
         <div class="model-pick" id="whitebg-models">
           <span style="font-size:13px;color:var(--ink-soft);">修白底图模型：</span>
-          <label data-model="chatgpt"><input type="checkbox" value="chatgpt" checked /> ChatGPT</label>
+          <label data-model="chatgpt"><input type="checkbox" value="chatgpt" /> ChatGPT</label>
           <label data-model="banana" class="checked"><input type="checkbox" value="banana" checked /> Banana</label>
-          <label data-model="doubao"><input type="checkbox" value="doubao" /> 豆包</label>
-          <button class="btn btn-primary btn-sm" id="btn-fix-whitebg">开始修白底图（模拟）</button>
+          <label data-model="doubao" class="checked"><input type="checkbox" value="doubao" checked /> 豆包</label>
+          <button class="btn btn-primary btn-sm" id="btn-fix-whitebg" type="button">开始修白底图（模拟）</button>
         </div>
 
         <div class="whitebg-results" id="whitebg-results"></div>
 
         <div class="saved-bar" id="whitebg-saved">
-          ✓ 已勾选白底图，存入本地文件夹/库（演示：写入 localStorage）
+          ✓ 已记录白底图偏好（白底自动修图暂为模拟，偏好保存在本机浏览器）
         </div>
       </div>
     </section>
@@ -123,7 +123,7 @@
         <div class="track" id="track-qiushuang">
           <div class="track-head">
             <span class="badge badge-qiushuang">秋霜</span>
-            <span class="who">主图 · 细节图 · 尺寸图</span>
+            <span class="who" id="qs-track-who">主图 · 细节图 · 尺寸图</span>
             <span class="role">产品占比 / 细节焦点 / 对比物</span>
           </div>
           <div id="boxes-qiushuang"></div>
@@ -131,7 +131,7 @@
         <div class="track" id="track-anran">
           <div class="track-head">
             <span class="badge badge-anran">安然</span>
-            <span class="who">场景图策划</span>
+            <span class="who" id="ar-track-who">场景图策划</span>
             <span class="role">视觉语言呈现档案要点</span>
           </div>
           <div id="boxes-anran"></div>
@@ -145,13 +145,13 @@
       <div class="layer-head">
         <div class="layer-num">3</div>
         <h2>多模型生成 + 精改支线</h2>
-        <span class="tag tag-demo">演示数据</span>
+        <span class="tag tag-demo" data-mode-tag>演示数据</span>
         <div class="hint">在上方每个图片框内点「生成图片」框选模型；精改在框内支线对话产出 v2 / v3</div>
       </div>
       <p style="margin:0;font-size:13px;color:var(--ink-soft);">
-        操作说明：打开任一图片框 → <strong>生成图片</strong> → 勾选 Banana / 豆包（推荐）或 ChatGPT →
-        <strong>只勾选一张</strong> → 若不满意点 <strong>精改支线</strong> 改提示词并优化出新版本 → 再勾选。
-        勾选结果后可点 <strong>加入预览</strong>。
+        操作说明：打开任一图片框 → <strong>生成图片</strong> → 勾选 豆包 / Banana（推荐）或 ChatGPT →
+        <strong>勾选最满意的一张</strong> → 若不满意点 <strong>精改支线</strong>（自有上传图也可选豆包/Banana 重新精改出图）→
+        勾选结果后点 <strong>加入预览</strong>。
       </p>
       <div id="gen-summary" style="margin-top:12px;font-size:12px;color:var(--muted);"></div>
     </section>
@@ -162,13 +162,13 @@
       <div class="layer-head">
         <div class="layer-num">4</div>
         <h2>预览框 · 亚马逊 7 图顺序</h2>
-        <span class="tag tag-demo">演示数据</span>
+        <span class="tag tag-demo" data-mode-tag>演示数据</span>
         <div class="hint">从上层勾选加入 · 拖拽调序 · 增删</div>
       </div>
 
       <div class="preview-toolbar">
-        <button class="btn btn-sm" id="btn-auto-fill">一键填入已选图（演示）</button>
-        <button class="btn btn-ghost btn-sm" id="btn-clear-preview">清空预览</button>
+        <button class="btn btn-sm" id="btn-auto-fill" type="button">一键填入已选图（演示）</button>
+        <button class="btn btn-ghost btn-sm" id="btn-clear-preview" type="button">清空预览</button>
         <span style="font-size:12px;color:var(--muted);">拖拽卡片可改顺序 · 状态自动写入 localStorage</span>
       </div>
 
@@ -187,22 +187,22 @@
       <h3>选择生图模型</h3>
       <p id="gen-modal-desc">勾选模型。豆包 / Banana 优先；ChatGPT 若额度不足会明确提示。</p>
       <div class="modal-models" id="gen-modal-models">
-        <label data-model="banana" class="checked"><input type="checkbox" value="banana" checked /> Banana（Gemini）</label>
-        <label data-model="doubao" class="checked"><input type="checkbox" value="doubao" checked /> 豆包</label>
+        <label data-model="doubao" class="checked"><input type="checkbox" value="doubao" checked /> 豆包（火山方舟 · 快速稳定）</label>
+        <label data-model="banana" class="checked"><input type="checkbox" value="banana" checked /> Banana（Gemini 生图）</label>
         <label data-model="chatgpt"><input type="checkbox" value="chatgpt" /> ChatGPT</label>
       </div>
       <div class="modal-foot">
-        <button class="btn btn-ghost" id="gen-modal-cancel">取消</button>
-        <button class="btn btn-primary" id="gen-modal-ok">开始生成</button>
+        <button class="btn btn-ghost" id="gen-modal-cancel" type="button">取消</button>
+        <button class="btn btn-primary" id="gen-modal-ok" type="button">开始生成</button>
       </div>
     </div>
   </div>
 
   <div class="toast" id="toast"></div>
 
-  <script src="js/api-config.js?v=imgboard-1"></script>
-  <script src="js/api.js?v=imgboard-1"></script>
-  <script src="js/demo-data.js?v=imgboard-1"></script>
-  <script src="js/app.js?v=imgboard-1"></script>
+  <script src="js/api-config.js?v=imgboard-2"></script>
+  <script src="js/api.js?v=imgboard-2"></script>
+  <script src="js/demo-data.js?v=imgboard-2"></script>
+  <script src="js/app.js?v=imgboard-2"></script>
 </body>
 </html>
