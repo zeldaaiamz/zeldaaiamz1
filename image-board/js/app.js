@@ -1,29 +1,32 @@
-/* AI 做图看板 — 演示 + 真实 VOC / 生图 / 自有上传 / 精改与预览 */
+/* AI 做图看板 v4 — 真实 VOC + 白底真修锁定本体 + 2000x2000 PNG/JPG + 产品三级目录 */
 (function () {
-  const STORAGE_KEY = "ai-image-board-v2";
+  const STORAGE_KEY = "ai-image-board-v3";
+  const LEGACY_KEY = "ai-image-board-v2";
   const GEN_PROVIDERS = ["doubao", "banana", "chatgpt"];
   const MODEL_MAP = Object.fromEntries(DEMO.models.map((m) => [m.id, m]));
   const API = window.BoardAPI;
 
-  const state = loadState() || defaultState();
+  const state = normalizeState(loadState() || defaultState());
   let serverStatus = null;
   let vocImporting = false;
-  // Transient per-box runtime state (not persisted to localStorage)
-  // boxId -> { busy: bool, text: string, startedAt: number, controller: AbortController, lastError: string|null }
   const boxRuntime = {};
+  let WB = null;
 
   function defaultState() {
     return {
-      mode: "demo", // demo | real
+      mode: "demo",
       source: "demo",
       asin: DEMO.product.asin,
       productName: DEMO.product.name,
+      productDir: DEMO.product.name,
       taskId: null,
       archiveOverride: null,
-      whitebgSelectedModels: ["banana", "doubao"],
-      whitebgGenerated: false,
-      whitebgPicks: {},
-      whitebgSaved: false,
+      whitebgSources: [],
+      whitebgSelectedSourceId: null,
+      whitebgInstruction: "",
+      whitebgSelectedModels: ["doubao"],
+      whitebgResults: [],
+      activeWhitebgId: null,
       boxes: {},
       preview: [null, null, null, null, null, null, null],
       genTargetBoxId: null,
@@ -32,9 +35,37 @@
     };
   }
 
+  function normalizeState(raw) {
+    const s = Object.assign(defaultState(), raw || {});
+    if (!Array.isArray(s.whitebgSources)) s.whitebgSources = [];
+    if (!Array.isArray(s.whitebgResults)) s.whitebgResults = [];
+    s.whitebgResults = s.whitebgResults.filter((r) => r && r.imageUrl && !r.mock);
+    if (!Array.isArray(s.whitebgSelectedModels) || !s.whitebgSelectedModels.length) {
+      s.whitebgSelectedModels = ["doubao"];
+    } else {
+      s.whitebgSelectedModels = s.whitebgSelectedModels.filter((m) => GEN_PROVIDERS.includes(m));
+      if (!s.whitebgSelectedModels.length) s.whitebgSelectedModels = ["doubao"];
+    }
+    if (s.whitebgSources.length && !s.whitebgSources.some((u) => u.id === s.whitebgSelectedSourceId)) {
+      s.whitebgSelectedSourceId = s.whitebgSources[s.whitebgSources.length - 1].id;
+    }
+    if (s.whitebgResults.length && !s.whitebgResults.some((r) => r.id === s.activeWhitebgId)) {
+      s.activeWhitebgId = s.whitebgResults[s.whitebgResults.length - 1].id;
+    }
+    if (!s.whitebgResults.length) s.activeWhitebgId = null;
+    if (!Array.isArray(s.preview) || s.preview.length !== 7) {
+      s.preview = [null, null, null, null, null, null, null];
+    }
+    if (!s.boxes || typeof s.boxes !== "object") s.boxes = {};
+    delete s.whitebgGenerated;
+    delete s.whitebgPicks;
+    delete s.whitebgSaved;
+    return s;
+  }
+
   function loadState() {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_KEY);
       return raw ? JSON.parse(raw) : null;
     } catch {
       return null;
@@ -58,6 +89,13 @@
     return state.mode === "real" && state.source !== "demo";
   }
 
+  function displayProductFolder() {
+    if (state.productDir) return state.productDir;
+    const raw = (state.productName || state.asin || DEMO.product.name || "未命名产品").trim();
+    const clean = raw.replace(/[/\\:*?"<>|#%]+/g, " ").replace(/\s+/g, " ").trim();
+    return clean.length > 64 ? clean.slice(0, 64).trim() : clean;
+  }
+
   function toast(msg, opts) {
     const el = document.getElementById("toast");
     if (!el) return;
@@ -66,9 +104,7 @@
     el.textContent = msg;
     el.classList.add("show");
     clearTimeout(toast._t);
-    if (!sticky) {
-      toast._t = setTimeout(() => el.classList.remove("show"), duration);
-    }
+    if (!sticky) toast._t = setTimeout(() => el.classList.remove("show"), duration);
   }
 
   function modelDisplayName(mid) {
@@ -76,25 +112,21 @@
   }
 
   function humanizeError(err, providerId) {
-    if (err && err.isCancelled) return "已取消生成";
+    if (err && err.isCancelled) return "已取消操作";
     const data = (err && err.data) || null;
     const rawMsg = (data && data.error) || (err && err.message) || String(err || "");
     const s = String(rawMsg);
     const pName = modelDisplayName(providerId);
-
-    if (
-      (err && err.isTimeout) ||
-      (data && data.timeout) ||
-      /超时|timed?\s*out|AbortError/i.test(s)
-    ) {
+    if (data && data.code === "MISSING_WHITEBG_REF") return s;
+    if ((err && err.isTimeout) || (data && data.timeout) || /超时|timed?\s*out|AbortError/i.test(s)) {
       if (providerId === "banana") return "Banana 超时，请重试或改用豆包";
       return `${pName} 超时，请重试或改用豆包`;
     }
     if ((data && data.quota) || /429|insufficient_quota|额度不足|billing_hard_limit|resource_exhausted/i.test(s)) {
       if (providerId === "banana") return "Banana 配额繁忙（429），请稍后重试或改用豆包";
-      return "ChatGPT 额度不足（需 API Credits，与 Pro 无关）。请改用豆包或 Banana。";
+      if (providerId === "chatgpt") return "ChatGPT 额度不足（需 API Credits，与 Pro 无关）。请改用豆包或 Banana。";
+      return `${pName} 配额繁忙（429），请稍后重试`;
     }
-    if (/未配置 API Key/i.test(s)) return s;
     return s;
   }
 
@@ -122,13 +154,7 @@
 
   function getRuntime(boxId) {
     if (!boxRuntime[boxId]) {
-      boxRuntime[boxId] = {
-        busy: false,
-        text: "",
-        startedAt: 0,
-        controller: null,
-        lastError: null,
-      };
+      boxRuntime[boxId] = { busy: false, text: "", startedAt: 0, controller: null, lastError: null };
     }
     return boxRuntime[boxId];
   }
@@ -152,58 +178,48 @@
 
   function setModeUI() {
     const real = isRealMode();
+    const hasRealWb = !!(WB && WB.getActiveRef());
     const banner = document.getElementById("top-banner");
-    banner.classList.toggle("banner-real", real);
-    document.getElementById("banner-mode").textContent = real ? "真实 VOC / 生图模式" : "演示数据模式";
-    document.getElementById("banner-detail").textContent = real
-      ? "· 图落盘至 Mac「亚马逊产品图片」分类目录 · 豆包 / Banana 真实生图"
-      : "· 可导入真实 VOC / 上传自有图 · ChatGPT 额度不足会提示";
+    banner.classList.toggle("banner-real", real || hasRealWb);
+    document.getElementById("banner-mode").textContent = real ? "真实 VOC / 受控图生图模式" : "演示档案模式（支持白底真修与受控生图）";
+    document.getElementById("banner-detail").textContent =
+      "· 目录：亚马逊产品图片/" + displayProductFolder() + "/{过程图|白底图|最终版本} · 全量 2000×2000 PNG/JPG · 强制锁定白底本体";
 
     const modeTag = document.getElementById("mode-tag");
     if (modeTag) {
-      modeTag.textContent = real ? "真实VOC" : "演示数据";
+      modeTag.textContent = real ? "真实VOC" : "演示档案";
       modeTag.classList.toggle("tag-demo", !real);
       modeTag.classList.toggle("tag-real", real);
     }
 
     document.querySelectorAll("[data-mode-tag]").forEach((el) => {
-      el.textContent = real ? "真实" : "演示数据";
+      el.textContent = real ? "真实" : "演示档案";
       el.classList.toggle("tag-demo", !real);
       el.classList.toggle("tag-real", real);
     });
 
     const whitebgTag = document.getElementById("whitebg-mode-tag");
     if (whitebgTag) {
-      whitebgTag.textContent = real ? "模拟（暂未接真修）" : "演示模拟";
-      whitebgTag.classList.toggle("tag-demo", !real);
-      whitebgTag.classList.toggle("tag-mock", real);
-      whitebgTag.classList.remove("tag-real");
-    }
-
-    const autoFillBtn = document.getElementById("btn-auto-fill");
-    if (autoFillBtn) {
-      autoFillBtn.textContent = real ? "一键填入已选图" : "一键填入已选图（演示）";
+      whitebgTag.textContent = hasRealWb ? "真实 · 已锁定" : "真实真修";
+      whitebgTag.className = "tag tag-real";
     }
 
     const mac = (serverStatus && serverStatus.macImageRoot) || "/Users/lhy/Desktop/亚马逊产品图片";
     const sq = serverStatus && serverStatus.syncQueue;
     let syncSummary = "";
     if (sq) {
-      syncSummary = sq.pending > 0
-        ? ` · 待同步 Mac ${sq.pending} 项`
-        : (sq.syncedCount > 0 ? ` · 已同步 Mac ${sq.syncedCount} 项` : "");
+      syncSummary = sq.pending > 0 ? ` · 待同步 Mac ${sq.pending} 项` : sq.syncedCount > 0 ? ` · 已同步 Mac ${sq.syncedCount} 项` : "";
     }
     document.getElementById("save-path").textContent =
-      "落盘：" + mac + "／{主图|细节图|尺寸图|场景图1-7|精改版本|预览选用…}" +
-      (state.lastSavePath ? " · 最近：" + state.lastSavePath : "") +
+      `落盘：${mac}/${displayProductFolder()}/{过程图 | 白底图 | 最终版本}（2000×2000 .png/.jpg）` +
+      (state.lastSavePath ? ` · 最近：${state.lastSavePath}` : "") +
       syncSummary;
 
     document.getElementById("product-sub").textContent = real
-      ? `亚马逊 7 图 · ASIN ${state.asin || "—"} · task ${state.taskId || "—"}${state.productName ? " · " + state.productName : ""}`
-      : `亚马逊 7 图 Listing · 演示产品 ${DEMO.product.name}（${DEMO.product.asin}）`;
+      ? `亚马逊 7 图 · ASIN ${state.asin || "—"} · 产品目录「${displayProductFolder()}」`
+      : `亚马逊 7 图 Listing · 当前演示档案：${DEMO.product.name}（可导入真实 ASIN 如 B0GVDS8X33）`;
   }
 
-  /* ---------- Archive ---------- */
   function activeArchive() {
     if (state.source === "etsy") return DEMO.archives.etsy;
     if (state.source === "demo") return DEMO.archives.amazon;
@@ -214,8 +230,7 @@
   function renderArchive() {
     const data = activeArchive();
     const isRealCard = isRealMode() && state.source === "amazon" && !!state.archiveOverride;
-    document.getElementById("source-label").textContent =
-      (data.label || "") + (isRealCard ? " · 真实导入" : " · 演示数据");
+    document.getElementById("source-label").textContent = (data.label || "") + (isRealCard ? " · 真实导入" : " · 演示数据");
     document.querySelectorAll("#source-toggle button").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.source === state.source);
     });
@@ -238,49 +253,6 @@
       `<div class="archive-map" style="grid-column:1/-1">字段映射：${escapeHtml(data.note || "")}</div>`;
   }
 
-  /* ---------- White-bg (mock, clearly badged as 模拟) ---------- */
-  function renderWhitebgUploads() {
-    const subLabel = isRealMode() ? "示例" : "演示";
-    document.getElementById("whitebg-uploads").innerHTML =
-      DEMO.whitebgUploads
-        .map(
-          (u) => `
-      <div class="upload-thumb"><div class="ph" style="background:${u.tone}">${u.label}</div><span class="label">${subLabel}</span></div>`
-        )
-        .join("") +
-      `<div class="upload-thumb" style="border-style:solid;opacity:.6"><div class="ph">+ n</div></div>`;
-  }
-  function syncWhitebgModelLabels() {
-    document.querySelectorAll("#whitebg-models label[data-model]").forEach((lab) => {
-      const input = lab.querySelector("input");
-      const checked = state.whitebgSelectedModels.includes(input.value);
-      input.checked = checked;
-      lab.classList.toggle("checked", checked);
-    });
-  }
-  function renderWhitebgResults() {
-    const root = document.getElementById("whitebg-results");
-    const cols = ["chatgpt", "banana", "doubao"];
-    root.innerHTML = cols
-      .map((mid) => {
-        const m = MODEL_MAP[mid];
-        const selected = state.whitebgSelectedModels.includes(mid);
-        if (!selected) return `<div class="model-col empty"><h4>${m.name}</h4><div class="empty-msg">未勾选，故无图</div></div>`;
-        if (!state.whitebgGenerated) return `<div class="model-col"><h4>${m.name}</h4><div class="empty-msg">尚未生成 · 白底修图暂为模拟</div></div>`;
-        const thumbs = DEMO.whitebgUploads
-          .map((u) => {
-            const isPick = state.whitebgPicks[mid] === u.id;
-            return `<div class="result-thumb ${isPick ? "selected" : ""}" data-model="${mid}" data-uid="${u.id}">
-              <div class="swatch ${m.cls}">${m.name}<br/>${u.label}</div><span class="check">✓</span></div>`;
-          })
-          .join("");
-        return `<div class="model-col"><h4>${m.name}<span class="tag tag-mock">模拟</span></h4><div class="result-thumbs">${thumbs}</div></div>`;
-      })
-      .join("");
-    document.getElementById("whitebg-saved").classList.toggle("show", state.whitebgSaved);
-  }
-
-  /* ---------- Plans ---------- */
   function plansByWho() {
     const all = currentPlans();
     const qs = all.filter((b) => b.who === "秋霜" || (b.id || "").startsWith("qs-") || ["主图", "细节图", "尺寸图"].includes(b.badge));
@@ -291,12 +263,8 @@
   }
 
   function resolveRefineProvider(box, selected) {
-    if (box.refineProvider && GEN_PROVIDERS.includes(box.refineProvider)) {
-      return box.refineProvider;
-    }
-    if (selected && GEN_PROVIDERS.includes(selected.model)) {
-      return selected.model;
-    }
+    if (box.refineProvider && GEN_PROVIDERS.includes(box.refineProvider)) return box.refineProvider;
+    if (selected && GEN_PROVIDERS.includes(selected.model)) return selected.model;
     return "doubao";
   }
 
@@ -304,7 +272,7 @@
     const box = ensureBox(plan.id);
     const rt = getRuntime(plan.id);
     const selected = box.results.find((r) => r.id === box.selectedResultId);
-    const isUploadSelected = !!(selected && !GEN_PROVIDERS.includes(selected.model));
+    const isNonGenSelected = !!(selected && !GEN_PROVIDERS.includes(selected.model));
     const refineProv = resolveRefineProvider(box, selected);
 
     const elapsedSec = rt.busy ? Math.max(0, Math.floor((Date.now() - rt.startedAt) / 1000)) : 0;
@@ -328,29 +296,29 @@
 
     const resultsHtml =
       box.results.length === 0
-        ? (rt.busy ? "" : `<div style="font-size:11px;color:var(--muted);margin-top:8px;">尚未生成 · 空态</div>`)
+        ? (rt.busy ? "" : `<div style="font-size:11px;color:var(--muted);margin-top:8px;">尚未生成 · 需先完成上方白底真修再点「生成图片」</div>`)
         : `<div class="gen-results">${box.results
             .map((r) => {
               const m = MODEL_MAP[r.model] || { name: r.model, cls: "model-generic" };
               const sel = r.id === box.selectedResultId;
               const img = r.imageUrl
                 ? `<img src="${escapeHtml(API.fileUrl(r.imageUrl))}" alt="${escapeHtml(m.name)}" />`
-                : `<div class="ph-img ${m.cls}">${escapeHtml(m.name)}<br/>v${r.version}<br/><span style="font-weight:400;opacity:.85">${r.mock ? "占位" : "真实"}</span></div>`;
+                : `<div class="ph-img ${m.cls}">${escapeHtml(m.name)}<br/>v${r.version}</div>`;
               return `<div class="gen-card ${sel ? "selected" : ""}" data-box="${escapeHtml(plan.id)}" data-rid="${escapeHtml(r.id)}">
                 ${img}
-                <div class="meta">${escapeHtml(r.label || "")}${r.macPath ? "<br/>→ Mac" : ""}</div>
+                <div class="meta">${escapeHtml(r.label || "")}${r.macPath ? "<br/>2000×2000" : ""}</div>
                 <span class="pick-mark">✓</span>
               </div>`;
             })
             .join("")}</div>`;
 
-    const refineTitle = isUploadSelected
-      ? `精改支线 · 自有上传 → 用 ${modelDisplayName(refineProv)} 重新生成`
-      : `精改支线 · ${selected ? modelDisplayName(selected.model) : "所选模型"}`;
+    const refineTitle = isNonGenSelected
+      ? `精改支线 · 基于锁定白底图用 ${modelDisplayName(refineProv)} 生成新版`
+      : `精改支线 · ${selected ? modelDisplayName(selected.model) : "所选模型"}（严格保持白底基准产品一致）`;
 
     const refineModelOptions = [
-      { id: "doubao", label: "豆包（推荐 · 快且稳）" },
-      { id: "banana", label: "Banana（Gemini 生图）" },
+      { id: "doubao", label: "豆包（推荐 · 2K图生图快且稳）" },
+      { id: "banana", label: "Banana（Gemini 图生图）" },
       { id: "chatgpt", label: "ChatGPT" },
     ]
       .map((opt) => `<option value="${opt.id}" ${refineProv === opt.id ? "selected" : ""}>${opt.label}</option>`)
@@ -360,15 +328,11 @@
       <div class="refine-panel ${box.refineOpen ? "open" : ""}">
         <h5>${escapeHtml(refineTitle)}</h5>
         <div class="refine-model-bar">
-          <span class="${isUploadSelected ? "refine-upload-tip" : ""}">
-            ${isUploadSelected ? "自有上传无法直接重绘，将改用生图模型生成新版本：" : "精改出图模型："}
-          </span>
-          <select data-refine-provider="${escapeHtml(plan.id)}" ${rt.busy ? "disabled" : ""}>
-            ${refineModelOptions}
-          </select>
+          <span class="${isNonGenSelected ? "refine-upload-tip" : ""}">精改出图模型（强制锚定白底产品基准图）：</span>
+          <select data-refine-provider="${escapeHtml(plan.id)}" ${rt.busy ? "disabled" : ""}>${refineModelOptions}</select>
         </div>
         <div class="refine-row">
-          <textarea rows="2" placeholder="输入修改意见，如：增强卡片质感、光线更温暖、主体占画面 85%…" data-refine-input="${escapeHtml(plan.id)}" ${rt.busy ? "disabled" : ""}>${escapeHtml(box.refineDraft || "")}</textarea>
+          <textarea rows="2" placeholder="输入构图/光线/场景修改意见（禁止修改产品自身形状/结构/颜色/材质）…" data-refine-input="${escapeHtml(plan.id)}" ${rt.busy ? "disabled" : ""}>${escapeHtml(box.refineDraft || "")}</textarea>
         </div>
         <div class="refine-row">
           <button type="button" class="btn btn-sm" data-action="rewrite-prompt" data-box="${escapeHtml(plan.id)}" ${rt.busy ? "disabled" : ""}>暂存意见</button>
@@ -376,7 +340,7 @@
             ${rt.busy ? '<span class="spinner"></span> 处理中…' : `优化 → 生成新版（${escapeHtml(modelDisplayName(refineProv))}）`}
           </button>
         </div>
-        <div style="font-size:11px;color:var(--muted);">先由豆包对话优化英文生图提示词，再调用上方所选生图模型产出新版</div>
+        <div style="font-size:11px;color:var(--muted);">先优化提示词，再附带「锁定白底产品图」调用模型输出 2000×2000 新版存入「过程图/」</div>
       </div>`;
 
     return `
@@ -390,7 +354,7 @@
         </div>
         <div class="label-sm">文字版策划</div>
         <div class="brief-text" contenteditable="true" data-brief="${escapeHtml(plan.id)}">${escapeHtml(plan.brief)}</div>
-        <div class="label-sm">生图提示词</div>
+        <div class="label-sm">生图提示词（服务端自动注入白底本体防魔改锁）</div>
         <div class="prompt-text" contenteditable="true" id="prompt-${escapeHtml(plan.id)}" data-prompt="${escapeHtml(plan.id)}">${escapeHtml(plan.prompt)}</div>
         <div class="box-actions">
           <button type="button" class="btn btn-primary btn-sm" data-action="generate" data-box="${escapeHtml(plan.id)}" ${rt.busy ? "disabled" : ""}>
@@ -399,7 +363,7 @@
           <button type="button" class="btn btn-sm" data-action="upload-box" data-box="${escapeHtml(plan.id)}" ${rt.busy ? "disabled" : ""}>上传图片</button>
           <button type="button" class="btn btn-sm" data-action="toggle-refine" data-box="${escapeHtml(plan.id)}" ${box.results.length ? "" : "disabled"}>精改支线</button>
           <button type="button" class="btn btn-success btn-sm" data-action="add-preview" data-box="${escapeHtml(plan.id)}" ${selected ? "" : "disabled"}>
-            ${box.inPreview ? "已在预览" : "加入预览"}
+            ${box.inPreview ? "已在预览（更新）" : "加入预览"}
           </button>
           ${selected ? `<span style="font-size:11px;color:var(--green);">已选：${escapeHtml(modelDisplayName(selected.model))} v${selected.version}</span>` : `<span style="font-size:11px;color:var(--muted);">请勾选一张</span>`}
         </div>
@@ -411,6 +375,7 @@
   }
 
   function renderPlans() {
+    if (WB) WB.renderLockBanner();
     const { qs, ar } = plansByWho();
     const qsWhoEl = document.getElementById("qs-track-who");
     if (qsWhoEl) {
@@ -423,8 +388,7 @@
   }
 
   function updateGenSummary() {
-    const plans = currentPlans();
-    const chips = plans.map((p) => {
+    const chips = currentPlans().map((p) => {
       const b = state.boxes[p.id];
       const rt = boxRuntime[p.id];
       let cls = "";
@@ -439,7 +403,6 @@
     document.getElementById("gen-summary").innerHTML = `<div class="status-chips">${chips.join("")}</div>`;
   }
 
-  /* ---------- Preview ---------- */
   function renderPreview() {
     const root = document.getElementById("preview-slots");
     root.innerHTML = state.preview
@@ -457,7 +420,7 @@
           <div class="slot-body" draggable="true" data-slot-body="${idx}">
             ${ph}
             <div class="slot-title">${escapeHtml(item.title)}</div>
-            <div class="slot-src">${escapeHtml(modelDisplayName(item.model))} v${item.version} · ${escapeHtml(item.boxId)}</div>
+            <div class="slot-src">${escapeHtml(modelDisplayName(item.model))} v${item.version} · 2000×2000</div>
           </div>
           <div class="slot-ops">
             <button type="button" data-action="preview-up" data-slot="${idx}">前移</button>
@@ -469,17 +432,31 @@
       .join("");
   }
 
-  /* ---------- Generate ---------- */
   function openGenModal(boxId) {
     const rt = getRuntime(boxId);
     if (rt.busy) {
       toast("该规划框正在生成中，请稍候或点框内「取消」");
       return;
     }
+    const wbRef = WB && WB.getActiveRef();
+    if (!wbRef || !wbRef.imageUrl) {
+      rt.lastError = "已阻断生图：请先在第 1 层完成「白底真修」并锁定白底产品图（永久规则：禁止无白底参考图纯文生空想产品）";
+      renderPlans();
+      if (WB) WB.focusSection("请先完成第 1 层「白底真修」锁定产品本体后再生成图片");
+      return;
+    }
     state.genTargetBoxId = boxId;
     const plan = findPlan(boxId);
     document.getElementById("gen-modal-desc").textContent =
-      `为「${plan ? plan.title : boxId}」勾选生图模型。豆包与 Banana 已配置可用；ChatGPT 若无额度会提示。`;
+      `为「${plan ? plan.title : boxId}」勾选图生图模型（输出 2000×2000 存入「过程图/」）。`;
+    const refCard = document.getElementById("gen-modal-ref");
+    if (refCard) {
+      refCard.innerHTML = `<img src="${escapeHtml(API.fileUrl(wbRef.imageUrl))}" alt="" />
+        <div>
+          <div><strong>🔒 强制绑定产品本体：${escapeHtml(wbRef.label)}</strong></div>
+          <div style="font-size:11px;opacity:.9;">严格保持原产品外形/结构/颜色/比例/材质不变</div>
+        </div>`;
+    }
     document.querySelectorAll("#gen-modal-models label").forEach((lab) => {
       const id = lab.querySelector("input").value;
       const st = ((serverStatus && serverStatus.providers) || []).find((p) => p.id === id);
@@ -500,13 +477,6 @@
         tip.style.color = st && st.configured ? "var(--green)" : "var(--danger)";
       }
     });
-    let allow = document.getElementById("allow-mock-fallback");
-    if (!allow) {
-      const wrap = document.createElement("label");
-      wrap.style.cssText = "display:flex;gap:8px;align-items:center;font-size:12px;margin:8px 0 12px;color:var(--muted)";
-      wrap.innerHTML = `<input type="checkbox" id="allow-mock-fallback" /> 未配置 Key 时允许占位图（文件名含 DEMO）`;
-      document.getElementById("gen-modal-models").after(wrap);
-    }
     document.getElementById("gen-modal").classList.add("open");
   }
 
@@ -523,9 +493,25 @@
     } catch (_) {}
   }
 
+  function inferKind(boxId) {
+    if ((boxId || "").startsWith("qs-main")) return "main";
+    if ((boxId || "").startsWith("qs-detail")) return "detail";
+    if ((boxId || "").startsWith("qs-size")) return "size";
+    const m = /ar-scene-(\d+)/.exec(boxId || "");
+    if (m) return "scene-" + m[1];
+    if ((boxId || "").startsWith("ar-")) return "scene";
+    return "raw";
+  }
+
   async function runGenerate() {
     const boxId = state.genTargetBoxId;
     if (!boxId) return;
+    const wbRef = WB && WB.getActiveRef();
+    if (!wbRef || !wbRef.imageUrl) {
+      closeGenModal();
+      if (WB) WB.focusSection("缺少精修白底产品图，已阻断生图");
+      return;
+    }
     const checked = [...document.querySelectorAll("#gen-modal-models input:checked")].map((i) => i.value);
     if (!checked.length) {
       toast("请至少勾选一个模型");
@@ -533,10 +519,13 @@
     }
     const plan = findPlan(boxId);
     const promptEl = document.getElementById(`prompt-${boxId}`);
-    const prompt = promptEl ? promptEl.innerText.trim() : (plan ? plan.prompt : "");
-    if (plan && prompt) plan.prompt = prompt;
+    const prompt = (promptEl ? promptEl.innerText.trim() : (plan ? plan.prompt : "")).trim();
+    if (!prompt) {
+      toast("生图提示词不能为空，请填写提示词");
+      return;
+    }
+    if (plan) plan.prompt = prompt;
     const box = ensureBox(boxId);
-    const allowMock = !!(document.getElementById("allow-mock-fallback") || {}).checked;
     closeGenModal();
 
     const rt = getRuntime(boxId);
@@ -555,8 +544,8 @@
         const mid = checked[i];
         const mName = modelDisplayName(mid);
         rt.text = checked.length > 1
-          ? `正在生成 (${i + 1}/${checked.length})：${mName}…`
-          : `${mName} 生图中${mid === "banana" ? "（最长约 90s）" : ""}…`;
+          ? `基于白底基准图生成 (${i + 1}/${checked.length})：${mName}…`
+          : `${mName} 图生图中（锚定白底基准图 · 输出 2000×2000）…`;
         renderPlans();
         toast(rt.text, { duration: 4000 });
 
@@ -569,28 +558,27 @@
               prompt,
               boxId,
               asin: state.asin || DEMO.product.asin,
+              productName: state.productName || "",
+              whitebgImageUrl: wbRef.imageUrl,
               version: nextVer,
               kind: inferKind(boxId),
-              allowMockFallback: allowMock || !isRealMode(),
-              forceMock: false,
             },
-            { timeoutMs: 100000, signal: ctrl.signal }
+            { timeoutMs: 105000, signal: ctrl.signal }
           );
           const id = `${boxId}-${mid}-v${nextVer}-${Date.now()}`;
           box.results.push({
             id,
             model: mid,
             version: nextVer,
-            label: `${mName} · v${nextVer} · ${res.mock ? "占位" : "真实"}`,
+            label: `${mName} · v${nextVer} · 真实`,
             imageUrl: res.imageUrl,
             macPath: res.saved && res.saved.macPath,
-            mock: !!res.mock,
+            mock: false,
           });
           box.selectedResultId = id;
           box.refineProvider = mid;
-          if (res.saved && res.saved.category) {
-            state.lastSavePath = res.saved.category + "/" + res.saved.filename;
-          }
+          if (res.productDir) state.productDir = res.productDir;
+          if (res.saved && res.saved.category) state.lastSavePath = res.saved.category + "/" + res.saved.filename;
           okNames.push(mName);
           saveState();
           renderPlans();
@@ -602,33 +590,6 @@
           const msg = humanizeError(e, mid);
           errMsgs.push(msg);
           rt.lastError = msg;
-          if ((!isRealMode() || allowMock) && !(e && e.isTimeout)) {
-            try {
-              const res = await API.post(
-                "/api/generate",
-                {
-                  provider: mid,
-                  prompt,
-                  boxId,
-                  asin: state.asin || DEMO.product.asin,
-                  version: 1,
-                  kind: inferKind(boxId),
-                  forceMock: true,
-                },
-                { timeoutMs: 20000, signal: ctrl.signal }
-              );
-              const id = `${boxId}-${mid}-v1-mock-${Date.now()}`;
-              box.results.push({
-                id,
-                model: mid,
-                version: 1,
-                label: `${mName} · v1 · 占位`,
-                imageUrl: res.imageUrl,
-                mock: true,
-              });
-              if (!box.selectedResultId) box.selectedResultId = id;
-            } catch (_) {}
-          }
         }
       }
     } finally {
@@ -636,81 +597,58 @@
       rt.controller = null;
       rt.text = "";
       saveState();
+      setModeUI();
       renderPlans();
       refreshStatusQuiet();
     }
 
-    if (cancelled) {
-      toast("已取消生成", { duration: 3000 });
-    } else if (okNames.length > 0 && errMsgs.length === 0) {
-      toast(`生成完成（${okNames.join("、")}）· 已入库待同步 Mac`, { duration: 4000 });
-    } else if (okNames.length > 0 && errMsgs.length > 0) {
-      toast(`已完成 ${okNames.join("、")}；${errMsgs.join("；")}`, { duration: 5500 });
-    } else if (errMsgs.length > 0) {
-      toast(errMsgs.join("；"), { duration: 5500 });
-    }
-  }
-
-  function inferKind(boxId) {
-    if ((boxId || "").startsWith("qs-main")) return "main";
-    if ((boxId || "").startsWith("qs-detail")) return "detail";
-    if ((boxId || "").startsWith("qs-size")) return "size";
-    const m = /ar-scene-(\d+)/.exec(boxId || "");
-    if (m) return "scene-" + m[1];
-    if ((boxId || "").startsWith("ar-")) return "scene";
-    return "raw";
+    if (cancelled) toast("已取消生成", { duration: 3000 });
+    else if (okNames.length > 0 && !errMsgs.length) toast(`生成完成（${okNames.join("、")}）· 2000×2000 已存入「过程图/」`, { duration: 4200 });
+    else if (okNames.length > 0 && errMsgs.length) toast(`已完成 ${okNames.join("、")}；${errMsgs.join("；")}`, { duration: 5500 });
+    else if (errMsgs.length) toast(errMsgs.join("；"), { duration: 5500 });
   }
 
   async function optimizeBox(boxId) {
     const box = ensureBox(boxId);
     const rt = getRuntime(boxId);
-    if (rt.busy) {
-      toast("当前规划框正在处理中，请稍候");
+    if (rt.busy) return toast("当前规划框正在处理中，请稍候");
+    const wbRef = WB && WB.getActiveRef();
+    if (!wbRef || !wbRef.imageUrl) {
+      rt.lastError = "请先在第 1 层完成「白底真修」锁定产品本体后再执行精改生图";
+      renderPlans();
+      if (WB) WB.focusSection("请先完成「白底真修」锁定产品本体后再执行精改");
       return;
     }
     const selected = box.results.find((r) => r.id === box.selectedResultId);
-    if (!selected) {
-      toast("请先勾选一张图");
-      return;
-    }
-    // Sync latest textarea value if DOM exists
+    if (!selected) return toast("请先勾选一张图");
+
     const ta = document.querySelector(`textarea[data-refine-input="${boxId}"]`);
     if (ta) box.refineDraft = ta.value;
     const selEl = document.querySelector(`select[data-refine-provider="${boxId}"]`);
-    if (selEl && GEN_PROVIDERS.includes(selEl.value)) {
-      box.refineProvider = selEl.value;
-    }
+    if (selEl && GEN_PROVIDERS.includes(selEl.value)) box.refineProvider = selEl.value;
     const targetProvider = resolveRefineProvider(box, selected);
     const targetName = modelDisplayName(targetProvider);
 
     const plan = findPlan(boxId);
     const promptEl = document.getElementById(`prompt-${boxId}`);
-    const prompt = promptEl ? promptEl.innerText.trim() : (plan ? plan.prompt : "");
-    const instruction = (box.refineDraft || "").trim() || "增强产品主体占比、材质细节与光线质感";
+    const prompt = (promptEl ? promptEl.innerText.trim() : (plan ? plan.prompt : "")).trim();
+    const instruction = (box.refineDraft || "").trim() || "优化画面构图与光影层次，严格保持产品外观结构材质一致";
 
     const ctrl = new AbortController();
     rt.busy = true;
     rt.startedAt = Date.now();
     rt.controller = ctrl;
     rt.lastError = null;
-    rt.text = "正在优化生图提示词…";
+    rt.text = "正在优化提示词（保留白底本体硬约束）…";
     renderPlans();
-    toast("正在优化提示词并生成精改新图…", { duration: 3500 });
+    toast("正在优化提示词并基于白底基准图生成精改新版…", { duration: 3500 });
 
     let newPrompt = prompt;
     const nextVer = Math.max(1, ...box.results.map((r) => r.version || 1)) + 1;
 
     try {
       try {
-        const chat = await API.post(
-          "/api/refine",
-          {
-            provider: targetProvider,
-            prompt,
-            instruction,
-          },
-          { timeoutMs: 65000, signal: ctrl.signal }
-        );
+        const chat = await API.post("/api/refine", { provider: targetProvider, prompt, instruction }, { timeoutMs: 65000, signal: ctrl.signal });
         newPrompt = chat.newPrompt || prompt;
         if (plan) plan.prompt = newPrompt;
       } catch (e) {
@@ -719,7 +657,7 @@
         if (plan) plan.prompt = newPrompt;
       }
 
-      rt.text = `${targetName} 正在生成精改版 v${nextVer}…`;
+      rt.text = `${targetName} 正在基于白底基准图生成精改版 v${nextVer}（2000×2000）…`;
       renderPlans();
 
       const res = await API.post(
@@ -729,30 +667,31 @@
           prompt: newPrompt,
           boxId,
           asin: state.asin || DEMO.product.asin,
+          productName: state.productName || "",
+          whitebgImageUrl: wbRef.imageUrl,
           version: nextVer,
           kind: "refine",
-          allowMockFallback: !isRealMode(),
         },
-        { timeoutMs: 100000, signal: ctrl.signal }
+        { timeoutMs: 105000, signal: ctrl.signal }
       );
       const id = `${boxId}-${targetProvider}-v${nextVer}-${Date.now()}`;
       box.results.push({
         id,
         model: targetProvider,
         version: nextVer,
-        label: `${targetName} · v${nextVer} · ${res.mock ? "占位" : "精改"}`,
+        label: `${targetName} · v${nextVer} · 精改`,
         imageUrl: res.imageUrl,
         macPath: res.saved && res.saved.macPath,
-        mock: !!res.mock,
+        mock: false,
       });
       box.selectedResultId = id;
       box.refineProvider = targetProvider;
+      if (res.productDir) state.productDir = res.productDir;
       if (res.saved) state.lastSavePath = res.saved.category + "/" + res.saved.filename;
-      toast(`精改完成：已生成 ${targetName} v${nextVer}`, { duration: 4000 });
+      toast(`精改完成：已生成 ${targetName} v${nextVer}（2000×2000）`, { duration: 4200 });
     } catch (e) {
-      if (e && e.isCancelled) {
-        toast("已取消精改生成", { duration: 3000 });
-      } else {
+      if (e && e.isCancelled) toast("已取消精改生成", { duration: 3000 });
+      else {
         const msg = humanizeError(e, targetProvider);
         rt.lastError = "精改失败：" + msg;
         toast("精改生图失败：" + msg, { duration: 5500 });
@@ -762,6 +701,7 @@
       rt.controller = null;
       rt.text = "";
       saveState();
+      setModeUI();
       renderPlans();
       refreshStatusQuiet();
     }
@@ -770,10 +710,7 @@
   function addToPreview(boxId) {
     const box = ensureBox(boxId);
     const selected = box.results.find((r) => r.id === box.selectedResultId);
-    if (!selected) {
-      toast("请先勾选一张");
-      return;
-    }
+    if (!selected || !selected.imageUrl) return toast("请先在框内生成或上传并勾选一张真实图片");
     const plan = findPlan(boxId);
     const entry = {
       boxId,
@@ -787,76 +724,33 @@
     if (existing >= 0) state.preview[existing] = entry;
     else {
       const empty = state.preview.findIndex((p) => !p);
-      if (empty < 0) {
-        toast("预览已满 7 槽，请先移除空位");
-        return;
-      }
+      if (empty < 0) return toast("预览已满 7 槽，请先移除一个槽位");
       state.preview[empty] = entry;
     }
     box.inPreview = true;
     saveState();
     renderPlans();
     renderPreview();
-    toast("已加入预览框");
+    if (WB) WB.syncPreviewToFinal({ silent: true });
+    toast("已加入预览框并同步写入「最终版本/」");
   }
 
   async function autoFillPreview() {
     const plans = currentPlans();
-    if (isRealMode()) {
-      // Fill from boxes that already have generated/uploaded results
-      const readyPlans = plans.filter((p) => {
-        const b = state.boxes[p.id];
-        return b && b.results && b.results.length > 0;
-      });
-      if (!readyPlans.length) {
-        toast("请先在上方规划框生成或上传图片，再一键填入");
-        return;
-      }
-      state.preview = [null, null, null, null, null, null, null];
-      Object.values(state.boxes).forEach((b) => (b.inPreview = false));
-      readyPlans.slice(0, 7).forEach((plan, idx) => {
-        const box = ensureBox(plan.id);
-        if (!box.selectedResultId) box.selectedResultId = box.results[box.results.length - 1].id;
-        const selected = box.results.find((r) => r.id === box.selectedResultId) || box.results[0];
-        state.preview[idx] = {
-          boxId: plan.id,
-          title: plan.title,
-          model: selected.model,
-          version: selected.version,
-          resultId: selected.id,
-          imageUrl: selected.imageUrl,
-        };
-        box.inPreview = true;
-      });
-      saveState();
-      renderPlans();
-      renderPreview();
-      toast(`已将 ${ Math.min(readyPlans.length, 7) } 张已选图片填入预览框`);
-      return;
+    const readyPlans = plans.filter((p) => {
+      const b = state.boxes[p.id];
+      return b && b.results && b.results.some((r) => r && r.imageUrl && !r.mock);
+    });
+    if (!readyPlans.length) {
+      return toast("请先完成白底真修并在上方规划框生成或上传图片，再一键填入预览");
     }
-
-    // Demo mode: fill 7 slots (using existing results or local demo placeholders)
-    const preferred = plans.slice(0, 7);
-    for (let idx = 0; idx < 7; idx++) {
-      const plan = preferred[idx];
-      if (!plan) {
-        state.preview[idx] = null;
-        continue;
-      }
+    state.preview = [null, null, null, null, null, null, null];
+    Object.values(state.boxes).forEach((b) => (b.inPreview = false));
+    readyPlans.slice(0, 7).forEach((plan, idx) => {
       const box = ensureBox(plan.id);
-      if (!box.results.length) {
-        const mid = ["doubao", "banana"][idx % 2];
-        box.results.push({
-          id: `${plan.id}-demo-${Date.now()}-${idx}`,
-          model: mid,
-          version: 1,
-          label: `${modelDisplayName(mid)} · v1 · 演示占位`,
-          mock: true,
-        });
-        box.selectedResultId = box.results[0].id;
-      }
-      if (!box.selectedResultId) box.selectedResultId = box.results[0].id;
-      const selected = box.results.find((r) => r.id === box.selectedResultId);
+      const validResults = box.results.filter((r) => r && r.imageUrl && !r.mock);
+      const selected = validResults.find((r) => r.id === box.selectedResultId) || validResults[validResults.length - 1];
+      box.selectedResultId = selected.id;
       state.preview[idx] = {
         boxId: plan.id,
         title: plan.title,
@@ -866,27 +760,18 @@
         imageUrl: selected.imageUrl,
       };
       box.inPreview = true;
-    }
+    });
     saveState();
     renderPlans();
     renderPreview();
-    toast("已填入 7 槽演示预览");
+    if (WB) await WB.syncPreviewToFinal({ silent: false });
   }
 
-  /* ---------- Own upload library ---------- */
   const KIND_TO_BOX = {
-    main: "qs-main",
-    detail: "qs-detail",
-    size: "qs-size",
-    "scene-1": "ar-scene-1",
-    "scene-2": "ar-scene-2",
-    "scene-3": "ar-scene-3",
-    "scene-4": "ar-scene-4",
-    "scene-5": "ar-scene-5",
-    "scene-6": "ar-scene-6",
-    "scene-7": "ar-scene-7",
-    refine: null,
-    preview: null,
+    main: "qs-main", detail: "qs-detail", size: "qs-size",
+    "scene-1": "ar-scene-1", "scene-2": "ar-scene-2", "scene-3": "ar-scene-3",
+    "scene-4": "ar-scene-4", "scene-5": "ar-scene-5", "scene-6": "ar-scene-6", "scene-7": "ar-scene-7",
+    refine: null, preview: null,
   };
 
   function renderUploadLib() {
@@ -895,22 +780,21 @@
     const uploads = [];
     Object.values(state.boxes || {}).forEach((b) => {
       (b.results || []).forEach((r) => {
-        if (r.model === "upload" || r.uploaded) uploads.push(r);
+        if ((r.model === "upload" || r.uploaded) && r.imageUrl) uploads.push(r);
       });
     });
     if (!uploads.length) {
-      root.innerHTML = `<div class="empty-msg">尚未上传自有图 · 空态</div>`;
+      root.innerHTML = `<div class="empty-msg" style="padding:10px 4px;">尚未上传自有图 · 支持 PNG / JPG / WebP（自动转存 2000×2000 PNG/JPG）</div>`;
       return;
     }
     root.innerHTML = uploads
       .slice(-12)
       .reverse()
-      .map((r) => {
-        const img = r.imageUrl
-          ? `<img src="${escapeHtml(API.fileUrl(r.imageUrl))}" alt="" />`
-          : `<div class="ph-img model-upload">上传</div>`;
-        return `<div class="upload-lib-card" title="${escapeHtml(r.label || "")}">${img}<div class="meta">${escapeHtml(r.label || "upload")}</div></div>`;
-      })
+      .map((r, idx) => `<div class="upload-lib-card" title="${escapeHtml(r.label || "")}">
+          <img src="${escapeHtml(API.fileUrl(r.imageUrl))}" alt="" />
+          <div class="meta">${escapeHtml(r.label || "upload")}</div>
+          <button type="button" class="btn btn-ghost btn-sm" style="width:100%;border:none;border-top:1px solid var(--line);border-radius:0;padding:3px 4px;font-size:10px;" data-use-as-wbsrc="${idx}">设为白底原图</button>
+        </div>`)
       .join("");
   }
 
@@ -918,7 +802,6 @@
     let targetBox = boxId || KIND_TO_BOX[kind] || "qs-main";
     const plans = currentPlans();
     if (!plans.find((p) => p.id === targetBox) && plans.length) {
-      // Match by prefix (e.g. qs-detail-1 or first ar-* scene)
       const byPrefix = plans.find((p) => p.id.startsWith(targetBox)) || (targetBox.startsWith("ar-") ? plans.find((p) => p.who === "安然") : null);
       if (byPrefix) targetBox = byPrefix.id;
     }
@@ -927,21 +810,15 @@
     const nextVer = Math.max(0, ...box.results.filter((r) => r.model === "upload").map((r) => r.version || 1)) + 1;
     const id = `upload-${targetBox}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const item = {
-      id,
-      model: "upload",
-      uploaded: true,
-      version: nextVer,
-      label: `自有上传 · ${res.category || kind || targetBox}`,
-      imageUrl: res.imageUrl,
-      macPath: res.saved && res.saved.macPath,
-      mock: false,
+      id, model: "upload", uploaded: true, version: nextVer,
+      label: `自有上传 · ${kind || targetBox}`,
+      imageUrl: res.imageUrl, macPath: res.saved && res.saved.macPath, mock: false,
     };
     box.results.push(item);
     box.selectedResultId = id;
     box.refineProvider = "doubao";
-    if (res.saved && res.saved.category) {
-      state.lastSavePath = res.saved.category + "/" + res.saved.filename;
-    }
+    if (res.productDir) state.productDir = res.productDir;
+    if (res.saved && res.saved.category) state.lastSavePath = res.saved.category + "/" + res.saved.filename;
     return { item, hadPrior, targetBox };
   }
 
@@ -955,29 +832,24 @@
   }
 
   async function uploadOwnFiles(files, kind, boxId) {
-    const list = [...files].filter((f) => f && f.type.startsWith("image/"));
-    if (!list.length) {
-      toast("请选择 PNG / JPG / WebP 图片文件");
-      return;
-    }
+    const list = [...files].filter((f) => f && (f.type.startsWith("image/") || /\.(png|jpe?g|webp)$/i.test(f.name)));
+    if (!list.length) return toast("请选择 PNG / JPG / WebP 图片文件");
     const st = document.getElementById("upload-status");
     const btnUp = document.getElementById("btn-upload-own");
     if (btnUp) btnUp.disabled = true;
-    if (st) {
-      st.className = "voc-status";
-      st.innerHTML = `<span class="spinner"></span> 上传中 0/${list.length}…`;
-    }
+    if (st) { st.className = "voc-status"; st.innerHTML = `<span class="spinner"></span> 上传规范化中 0/${list.length}…`; }
     let ok = 0;
     let switchedFromPrior = false;
     for (let i = 0; i < list.length; i++) {
       const file = list[i];
-      if (st) st.innerHTML = `<span class="spinner"></span> 上传中 ${i + 1}/${list.length}…`;
+      if (st) st.innerHTML = `<span class="spinner"></span> 上传规范化中 ${i + 1}/${list.length}…`;
       try {
         const dataUrl = await readFileAsDataURL(file);
         const res = await API.post(
           "/api/upload",
           {
             asin: state.asin || DEMO.product.asin,
+            productName: state.productName || "",
             boxId: boxId || KIND_TO_BOX[kind] || "",
             kind,
             filename: file.name,
@@ -988,6 +860,9 @@
         );
         const attached = attachUploadResult(res, res.boxId || boxId, kind);
         if (attached.hadPrior) switchedFromPrior = true;
+        if (!state.whitebgSources.length && WB) {
+          WB.addSourceItem(file.name || "已上传原图", res.imageUrl, res.saved && res.saved.filename);
+        }
         ok++;
       } catch (e) {
         toast(humanizeError(e, "upload"), { duration: 4500 });
@@ -996,22 +871,16 @@
     if (btnUp) btnUp.disabled = false;
     saveState();
     setModeUI();
+    if (WB) { WB.renderUploads(); WB.renderBoardPicker(); }
     renderPlans();
     renderUploadLib();
     refreshStatusQuiet();
     if (st) {
       st.className = ok ? "voc-status ok" : "voc-status err";
-      st.textContent = ok ? `已入库 ${ok} 张 → 待同步 Mac 分类目录` : "上传失败";
+      st.textContent = ok ? `✓ 已入库 ${ok} 张（2000×2000 PNG/JPG）→ ${displayProductFolder()}/过程图/` : "上传失败";
     }
     if (ok) {
-      toast(
-        switchedFromPrior
-          ? `已上传 ${ok} 张并切换为自有上传（原生成图仍保留在框内可点选）`
-          : `已上传 ${ok} 张自有图并入库`,
-        { duration: 4200 }
-      );
-    } else {
-      toast("没有成功上传的图片");
+      toast(switchedFromPrior ? `已上传 ${ok} 张（2000×2000）并选中（原图仍保留在框内）` : `已上传 ${ok} 张自有图（2000×2000）至「过程图/」`, { duration: 4200 });
     }
   }
 
@@ -1020,24 +889,16 @@
     input.type = "file";
     input.accept = "image/png,image/jpeg,image/webp";
     input.multiple = true;
-    input.onchange = () => {
-      const kind = inferKind(boxId);
-      uploadOwnFiles(input.files, kind, boxId);
-    };
+    input.onchange = () => uploadOwnFiles(input.files, inferKind(boxId), boxId);
     input.click();
   }
 
-  /* ---------- VOC import ---------- */
   async function importVoc() {
     if (vocImporting) return;
     const inputEl = document.getElementById("voc-query");
     const btnEl = document.getElementById("btn-voc-import");
     const q = inputEl.value.trim();
-    if (!q) {
-      toast("请输入 ASIN（如 B0GVDS8X33）或 taskId");
-      inputEl.focus();
-      return;
-    }
+    if (!q) { inputEl.focus(); return toast("请输入 ASIN（如 B0GVDS8X33）或 taskId"); }
     vocImporting = true;
     const st = document.getElementById("voc-import-status");
     const origBtnHtml = btnEl.innerHTML;
@@ -1048,17 +909,19 @@
     st.className = "voc-status";
     st.innerHTML = `<span class="spinner"></span> 正在从 VOC 拉取档案与规划框（0s）…`;
     const tick = setInterval(() => {
-      const sec = Math.floor((Date.now() - started) / 1000);
-      st.innerHTML = `<span class="spinner"></span> 正在从 VOC 拉取档案与规划框（${sec}s）…`;
+      st.innerHTML = `<span class="spinner"></span> 正在从 VOC 拉取档案与规划框（${Math.floor((Date.now() - started) / 1000)}s）…`;
     }, 1000);
 
     try {
       const res = await API.post("/api/voc/import", { asin: q }, { timeoutMs: 45000 });
+      const prevAsin = state.asin;
+      const nextAsin = res.asin || q;
       state.mode = "real";
       state.source = "amazon";
-      state.asin = res.asin || q;
+      state.asin = nextAsin;
       state.taskId = res.taskId;
-      state.productName = res.productName;
+      state.productName = res.productName || nextAsin;
+      state.productDir = res.productDir || res.productName || nextAsin;
       state.archiveOverride = res.archive;
       state.planBoxes = (res.planBoxes || []).map((b) => ({
         ...b,
@@ -1066,20 +929,28 @@
       }));
       state.boxes = {};
       state.preview = [null, null, null, null, null, null, null];
+      if (prevAsin !== nextAsin) {
+        state.whitebgSources = [];
+        state.whitebgSelectedSourceId = null;
+        state.whitebgResults = [];
+        state.activeWhitebgId = null;
+      }
+      if (WB && res.existingWhitebg && res.existingWhitebg.length) {
+        WB.hydrateExisting(res.existingWhitebg);
+      }
       Object.keys(boxRuntime).forEach((k) => delete boxRuntime[k]);
       if (res.saved) state.lastSavePath = res.saved.category + "/" + res.saved.filename;
       saveState();
       st.className = "voc-status ok";
-      st.textContent = `✓ 已导入 ${res.asin || res.taskId}（来源：${res.resolvedSource} · ${state.planBoxes.length} 个规划框）`;
+      st.textContent = `✓ 已导入 ${nextAsin} → 目录「${state.productDir}」（${state.planBoxes.length} 个规划框${state.activeWhitebgId ? " · 已载入历史白底图" : " · 请接着做白底真修"}）`;
       setModeUI();
       renderArchive();
-      renderWhitebgUploads();
-      renderWhitebgResults();
+      if (WB) { WB.renderUploads(); WB.syncModelLabels(); WB.renderResults(); }
       renderPlans();
       renderPreview();
       renderUploadLib();
       refreshStatusQuiet();
-      toast(`已导入 ${res.asin || res.taskId} 真实 VOC 档案（${state.planBoxes.length} 个规划框）`);
+      toast(`已导入 ${nextAsin} 真实 VOC 档案 → 产品目录「${state.productDir}」`);
     } catch (e) {
       st.className = "voc-status err";
       const errMsg = humanizeError(e, "voc");
@@ -1100,16 +971,13 @@
     saveState();
     setModeUI();
     renderArchive();
-    renderWhitebgUploads();
-    syncWhitebgModelLabels();
-    renderWhitebgResults();
+    if (WB) { WB.renderUploads(); WB.syncModelLabels(); WB.renderResults(); }
     renderPlans();
     renderPreview();
     renderUploadLib();
-    toast("已切回演示数据模式");
+    toast("已切回演示档案模式");
   }
 
-  /* ---------- DnD ---------- */
   let dragFrom = null;
   function bindPreviewDnD() {
     const root = document.getElementById("preview-slots");
@@ -1142,6 +1010,7 @@
       state.preview[to] = t;
       saveState();
       renderPreview();
+      if (WB) WB.syncPreviewToFinal({ silent: true });
     });
   }
 
@@ -1151,28 +1020,18 @@
       if (!btn) return;
       const nextSrc = btn.dataset.source;
       state.source = nextSrc;
-      if (nextSrc === "demo") {
-        state.mode = "demo";
-      } else if (nextSrc === "amazon" && state.archiveOverride) {
-        state.mode = "real";
-      } else if (nextSrc === "etsy") {
-        state.mode = "demo";
-      }
+      state.mode = nextSrc === "amazon" && state.archiveOverride ? "real" : "demo";
       saveState();
       setModeUI();
       renderArchive();
-      renderWhitebgUploads();
-      renderWhitebgResults();
+      if (WB) { WB.renderUploads(); WB.renderResults(); }
       renderPlans();
       renderPreview();
     });
 
     document.getElementById("btn-voc-import").addEventListener("click", importVoc);
     document.getElementById("voc-query").addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        importVoc();
-      }
+      if (e.key === "Enter") { e.preventDefault(); importVoc(); }
     });
 
     const btnUpload = document.getElementById("btn-upload-own");
@@ -1185,40 +1044,25 @@
         fileUpload.value = "";
       });
     }
-    document.getElementById("btn-demo-mode").addEventListener("click", backToDemo);
-
-    document.getElementById("whitebg-models").addEventListener("change", (e) => {
-      if (e.target.type !== "checkbox") return;
-      state.whitebgSelectedModels = [...document.querySelectorAll("#whitebg-models input:checked")].map((i) => i.value);
-      state.whitebgGenerated = false;
-      state.whitebgPicks = {};
-      state.whitebgSaved = false;
-      saveState();
-      syncWhitebgModelLabels();
-      renderWhitebgResults();
-    });
-    document.getElementById("btn-fix-whitebg").addEventListener("click", () => {
-      if (!state.whitebgSelectedModels.length) {
-        toast("请勾选至少一个白底修图模型");
-        return;
-      }
-      state.whitebgGenerated = true;
-      state.whitebgSelectedModels.forEach((mid) => {
-        state.whitebgPicks[mid] = DEMO.whitebgUploads[0].id;
+    document.getElementById("upload-lib-thumbs").addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-use-as-wbsrc]");
+      if (!btn || !WB) return;
+      const uploads = [];
+      Object.values(state.boxes || {}).forEach((b) => {
+        (b.results || []).forEach((r) => {
+          if ((r.model === "upload" || r.uploaded) && r.imageUrl) uploads.push(r);
+        });
       });
-      state.whitebgSaved = true;
+      const picked = uploads.slice(-12).reverse()[Number(btn.dataset.useAsWbsrc)];
+      if (!picked) return;
+      WB.addSourceItem(picked.label || "自有上传图", picked.imageUrl);
       saveState();
-      renderWhitebgResults();
-      toast("白底修图当前为模拟结果（偏好已保存）");
+      WB.renderUploads();
+      WB.focusSection("已选为白底待修原图，点「开始白底真修」即可");
     });
-    document.getElementById("whitebg-results").addEventListener("click", (e) => {
-      const thumb = e.target.closest(".result-thumb");
-      if (!thumb) return;
-      state.whitebgPicks[thumb.dataset.model] = thumb.dataset.uid;
-      state.whitebgSaved = true;
-      saveState();
-      renderWhitebgResults();
-    });
+
+    document.getElementById("btn-demo-mode").addEventListener("click", backToDemo);
+    if (WB) WB.bindEvents();
 
     document.getElementById("layer-plan").addEventListener("click", (e) => {
       const card = e.target.closest(".gen-card");
@@ -1237,27 +1081,15 @@
       const boxId = btn.dataset.box;
       if (action === "generate") openGenModal(boxId);
       if (action === "upload-box") pickFilesForBox(boxId);
-      if (action === "cancel-box") {
-        const rt = boxRuntime[boxId];
-        if (rt && rt.controller) rt.controller.abort("user");
-      }
-      if (action === "dismiss-error") {
-        const rt = getRuntime(boxId);
-        rt.lastError = null;
-        renderPlans();
-      }
-      if (action === "toggle-refine") {
-        ensureBox(boxId).refineOpen = !ensureBox(boxId).refineOpen;
-        saveState();
-        renderPlans();
-      }
+      if (action === "cancel-box" && boxRuntime[boxId] && boxRuntime[boxId].controller) boxRuntime[boxId].controller.abort("user");
+      if (action === "dismiss-error") { getRuntime(boxId).lastError = null; renderPlans(); }
+      if (action === "toggle-refine") { ensureBox(boxId).refineOpen = !ensureBox(boxId).refineOpen; saveState(); renderPlans(); }
       if (action === "optimize") optimizeBox(boxId);
       if (action === "rewrite-prompt") {
         const box = ensureBox(boxId);
         const ta = document.querySelector(`textarea[data-refine-input="${boxId}"]`);
         if (ta) box.refineDraft = ta.value;
-        if (!box.refineDraft.trim()) toast("请先填写修改说明");
-        else toast("已暂存修改意见，点右侧「优化 → 生成新版」即可生图");
+        toast(box.refineDraft.trim() ? "已暂存修改意见，点右侧「优化 → 生成新版」即可生图" : "请先填写修改说明");
         saveState();
       }
       if (action === "add-preview") addToPreview(boxId);
@@ -1265,53 +1097,32 @@
 
     document.getElementById("layer-plan").addEventListener("change", (e) => {
       const sel = e.target.closest("select[data-refine-provider]");
-      if (sel) {
-        const boxId = sel.dataset.refineProvider;
-        ensureBox(boxId).refineProvider = sel.value;
-        saveState();
-        renderPlans();
-      }
+      if (sel) { ensureBox(sel.dataset.refineProvider).refineProvider = sel.value; saveState(); renderPlans(); }
     });
 
     document.getElementById("layer-plan").addEventListener("input", (e) => {
       const ta = e.target.closest("textarea[data-refine-input]");
-      if (ta) {
-        ensureBox(ta.dataset.refineInput).refineDraft = ta.value;
-        saveStateDebounced();
-      }
+      if (ta) { ensureBox(ta.dataset.refineInput).refineDraft = ta.value; saveStateDebounced(); }
       const brief = e.target.closest("[data-brief]");
-      if (brief) {
-        const plan = findPlan(brief.dataset.brief);
-        if (plan) {
-          plan.brief = brief.innerText;
-          saveStateDebounced();
-        }
-      }
+      if (brief && findPlan(brief.dataset.brief)) { findPlan(brief.dataset.brief).brief = brief.innerText; saveStateDebounced(); }
       const prompt = e.target.closest("[data-prompt]");
-      if (prompt) {
-        const plan = findPlan(prompt.dataset.prompt);
-        if (plan) {
-          plan.prompt = prompt.innerText;
-          saveStateDebounced();
-        }
-      }
+      if (prompt && findPlan(prompt.dataset.prompt)) { findPlan(prompt.dataset.prompt).prompt = prompt.innerText; saveStateDebounced(); }
     });
 
     document.getElementById("gen-modal-cancel").addEventListener("click", closeGenModal);
     document.getElementById("gen-modal-ok").addEventListener("click", runGenerate);
-    document.getElementById("gen-modal").addEventListener("click", (e) => {
-      if (e.target.id === "gen-modal") closeGenModal();
-    });
+    document.getElementById("gen-modal").addEventListener("click", (e) => { if (e.target.id === "gen-modal") closeGenModal(); });
     document.getElementById("gen-modal-models").addEventListener("change", () => {
-      document.querySelectorAll("#gen-modal-models label").forEach((lab) => {
-        lab.classList.toggle("checked", lab.querySelector("input").checked);
-      });
+      document.querySelectorAll("#gen-modal-models label").forEach((lab) => lab.classList.toggle("checked", lab.querySelector("input").checked));
     });
 
     document.getElementById("btn-auto-fill").addEventListener("click", autoFillPreview);
+    document.getElementById("btn-sync-final").addEventListener("click", () => WB && WB.syncPreviewToFinal({ silent: false }));
     document.getElementById("btn-clear-preview").addEventListener("click", () => {
       state.preview = [null, null, null, null, null, null, null];
       Object.values(state.boxes).forEach((b) => (b.inPreview = false));
+      const stEl = document.getElementById("preview-sync-status");
+      if (stEl) stEl.textContent = "";
       saveState();
       renderPlans();
       renderPreview();
@@ -1325,30 +1136,23 @@
       if (action === "preview-remove") {
         const item = state.preview[idx];
         state.preview[idx] = null;
-        if (item && state.boxes[item.boxId]) {
-          state.boxes[item.boxId].inPreview = state.preview.some((p) => p && p.boxId === item.boxId);
-        }
+        if (item && state.boxes[item.boxId]) state.boxes[item.boxId].inPreview = state.preview.some((p) => p && p.boxId === item.boxId);
         saveState();
         renderPlans();
         renderPreview();
       }
       if (action === "preview-up" && idx > 0) {
-        const t = state.preview[idx - 1];
-        state.preview[idx - 1] = state.preview[idx];
-        state.preview[idx] = t;
-        saveState();
-        renderPreview();
+        const t = state.preview[idx - 1]; state.preview[idx - 1] = state.preview[idx]; state.preview[idx] = t;
+        saveState(); renderPreview(); if (WB) WB.syncPreviewToFinal({ silent: true });
       }
       if (action === "preview-down" && idx < 6) {
-        const t = state.preview[idx + 1];
-        state.preview[idx + 1] = state.preview[idx];
-        state.preview[idx] = t;
-        saveState();
-        renderPreview();
+        const t = state.preview[idx + 1]; state.preview[idx + 1] = state.preview[idx]; state.preview[idx] = t;
+        saveState(); renderPreview(); if (WB) WB.syncPreviewToFinal({ silent: true });
       }
     });
     document.getElementById("btn-reset").addEventListener("click", () => {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(LEGACY_KEY);
       location.reload();
     });
     document.getElementById("btn-jump-preview").addEventListener("click", () => {
@@ -1356,16 +1160,12 @@
     });
     bindPreviewDnD();
 
-    // Update elapsed counters for any active box generation every 1s
     setInterval(() => {
       document.querySelectorAll("[data-elapsed-box]").forEach((el) => {
-        const bid = el.dataset.elapsedBox;
-        const rt = boxRuntime[bid];
-        if (rt && rt.busy) {
-          const sec = Math.max(0, Math.floor((Date.now() - rt.startedAt) / 1000));
-          el.textContent = `已等待 ${sec}s`;
-        }
+        const rt = boxRuntime[el.dataset.elapsedBox];
+        if (rt && rt.busy) el.textContent = `已等待 ${Math.max(0, Math.floor((Date.now() - rt.startedAt) / 1000))}s`;
       });
+      if (WB) WB.tickElapsed();
     }, 1000);
   }
 
@@ -1373,23 +1173,19 @@
     const ps = document.getElementById("provider-status");
     if (!ps || !serverStatus) return;
     const sq = serverStatus.syncQueue;
-    const syncText = sq
-      ? (sq.pending > 0 ? `待同步 ${sq.pending}` : sq.syncedCount > 0 ? `已同步 ${sq.syncedCount}` : "就绪")
-      : "就绪";
+    const syncText = sq ? (sq.pending > 0 ? `待同步 ${sq.pending}` : sq.syncedCount > 0 ? `已同步 ${sq.syncedCount}` : "就绪") : "就绪";
     ps.innerHTML =
       (serverStatus.providers || [])
         .map((p) => {
           let cls = p.configured ? "live" : "missing";
           let label = p.configured ? "已配置" : "缺 " + p.missingKey;
-          if (p.id === "chatgpt" && p.configured) {
-            cls = "warn";
-            label = "已配置 · 额度可能不足";
-          }
+          if (p.id === "chatgpt" && p.configured) { cls = "warn"; label = "已配置 · 额度可能不足"; }
           const tip = p.note ? ` title="${escapeHtml(p.note)}"` : "";
           return `<span class="provider-pill ${cls}"${tip}>${escapeHtml(p.name)}：${escapeHtml(label)}</span>`;
         })
         .join("") +
-      `<span class="provider-pill">落盘 → ${escapeHtml((serverStatus.macImageRoot || "").replace("/Users/lhy/Desktop/", "~/Desktop/"))}（${escapeHtml(syncText)}）</span>`;
+      `<span class="provider-pill live">规格：2000×2000 PNG/JPG</span>` +
+      `<span class="provider-pill">目录 → ~/Desktop/亚马逊产品图片/{产品名}/{过程图|白底图|最终版本}（${escapeHtml(syncText)}）</span>`;
   }
 
   async function bootServer() {
@@ -1404,6 +1200,16 @@
         o.label = `${t.asin || ""} ${t.product || t.taskId || ""}`;
         dl.appendChild(o);
       });
+      if (isRealMode() && state.asin && !state.whitebgResults.length && WB) {
+        try {
+          const wb = await API.get(
+            `/api/whitebg/list?asin=${encodeURIComponent(state.asin)}&productName=${encodeURIComponent(state.productName || "")}`,
+            { timeoutMs: 10000 }
+          );
+          if (wb && wb.productDir) state.productDir = wb.productDir;
+          if (wb && wb.items && wb.items.length) { WB.hydrateExisting(wb.items); saveState(); }
+        } catch (_) {}
+      }
       renderProviderStatus();
     } catch (_) {
       document.getElementById("provider-status").innerHTML =
@@ -1412,15 +1218,20 @@
   }
 
   async function init() {
-    if (!state.preview || state.preview.length !== 7) state.preview = [null, null, null, null, null, null, null];
-    if (!state.boxes) state.boxes = {};
+    WB = window.BoardWhitebg.create({
+      state, API, DEMO, GEN_PROVIDERS, MODEL_MAP,
+      toast, humanizeError, escapeHtml, modelDisplayName,
+      saveState, saveStateDebounced, setModeUI, renderPlans, renderPreview,
+      ensureBox, currentPlans, findPlan, reconcilePreviewFlags, refreshStatusQuiet,
+      displayProductFolder, readFileAsDataURL,
+    });
     reconcilePreviewFlags();
     await bootServer();
     setModeUI();
     renderArchive();
-    renderWhitebgUploads();
-    syncWhitebgModelLabels();
-    renderWhitebgResults();
+    WB.renderUploads();
+    WB.syncModelLabels();
+    WB.renderResults();
     renderPlans();
     renderPreview();
     renderUploadLib();

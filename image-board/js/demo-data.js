@@ -74,6 +74,7 @@ window.DEMO = {
 
   models: [
     { id: "upload", name: "自有上传", cls: "model-upload" },
+    { id: "whitebg", name: "白底真修", cls: "model-doubao" },
     { id: "chatgpt", name: "ChatGPT", cls: "model-chatgpt" },
     { id: "banana", name: "Banana", cls: "model-banana" },
     { id: "doubao", name: "豆包", cls: "model-doubao" },

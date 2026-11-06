@@ -5,26 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AI 做图看板</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23c45c26'/%3E%3Ctext x='32' y='43' font-size='30' text-anchor='middle' fill='%23fff' font-family='sans-serif'%3E图%3C/text%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="css/board.css?v=imgboard-3" />
+  <link rel="stylesheet" href="css/board.css?v=imgboard-4" />
 </head>
 <body>
   <div class="demo-banner" id="top-banner">
     <span id="banner-mode">演示数据模式</span>
-    <span id="banner-detail">· 图保存至 Mac「亚马逊产品图片」· 豆包 / Banana 可用 · ChatGPT 额度不足时会提示</span>
+    <span id="banner-detail">· 落盘 Mac「亚马逊产品图片/{产品名}/{过程图|白底图|最终版本}」· 全量 2000×2000 PNG/JPG · 强制白底基准防魔改</span>
   </div>
 
   <header class="app-header">
     <div>
       <h1>AI 做图看板</h1>
-      <div class="sub" id="product-sub">亚马逊 7 图 Listing 树状流程 · 可导入真实 VOC 或使用演示数据</div>
-      <div class="save-path" id="save-path">落盘：Mac Desktop/亚马逊产品图片／（分类子文件夹）</div>
+      <div class="sub" id="product-sub">亚马逊 7 图 Listing 树状流程 · 白底真修锁定产品本体 → 多模型图生图 → 定稿落盘</div>
+      <div class="save-path" id="save-path">落盘：Mac Desktop/亚马逊产品图片/{产品名}/{过程图 | 白底图 | 最终版本}（2000×2000 .png/.jpg）</div>
     </div>
     <div class="header-actions">
       <a class="btn btn-ghost btn-sm" href="../tool/">← 总工作台</a>
       <span class="tag tag-demo" id="mode-tag">演示数据</span>
-      <button class="btn btn-ghost btn-sm" id="btn-demo-mode">切回演示数据</button>
-      <button class="btn btn-ghost btn-sm" id="btn-reset" title="清空本机状态">重置状态</button>
-      <button class="btn btn-sm" id="btn-jump-preview">跳到预览框 ↓</button>
+      <button class="btn btn-ghost btn-sm" id="btn-demo-mode" type="button">切回演示数据</button>
+      <button class="btn btn-ghost btn-sm" id="btn-reset" type="button" title="清空本机状态">重置状态</button>
+      <button class="btn btn-sm" id="btn-jump-preview" type="button">跳到预览框 ↓</button>
     </div>
   </header>
 
@@ -34,9 +34,9 @@
       <div class="layer-arrow"></div>
       <div class="layer-head">
         <div class="layer-num">1</div>
-        <h2>产品档案预处理入库</h2>
+        <h2>产品档案与白底真修入库</h2>
         <span class="tag tag-demo" data-mode-tag>演示数据</span>
-        <div class="hint">来源切换 → 档案卡片 → 修白底图 → 勾选入库</div>
+        <div class="hint">VOC 导入档案 → 上传原图做白底真修（必做，锁定产品本体）→ 自有图入库</div>
       </div>
 
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
@@ -58,11 +58,55 @@
       </div>
       <div id="provider-status" class="provider-status"></div>
 
+      <div class="archive-grid" id="archive-grid"></div>
+
+      <div class="section-block" id="whitebg-section">
+        <div class="whitebg-head-row">
+          <h3>白底图预处理（真修去背 · 产品本体锁定） <span class="tag tag-real" id="whitebg-mode-tag">真实</span></h3>
+          <span class="spec-pill">输出：2000×2000 · 纯白 RGB(255,255,255) · PNG · 存入「白底图/」</span>
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">
+          上传产品原图（或从已入库图片点选）→ 调用大模型图生图抠白底去杂物 → 选定「精修白底产品图」。<strong>永久规则：后续所有 AI 生图/精改均强制以此白底图作为产品本体，严禁无参考图空想或魔改产品结构/颜色/比例/材质。</strong>
+        </p>
+
+        <div class="whitebg-source-bar">
+          <label class="btn btn-sm btn-outline-accent" for="whitebg-file-input">+ 上传待修原图</label>
+          <input type="file" id="whitebg-file-input" accept="image/png,image/jpeg,image/webp" multiple hidden />
+          <button class="btn btn-sm" id="btn-whitebg-pick-board" type="button">从已入库图片选原图</button>
+          <span id="whitebg-src-status" class="voc-status"></span>
+        </div>
+
+        <div id="whitebg-board-picker" class="whitebg-board-picker" style="display:none;"></div>
+
+        <div class="whitebg-upload" id="whitebg-uploads"></div>
+
+        <div class="whitebg-controls">
+          <input
+            type="text"
+            id="whitebg-instruction"
+            class="whitebg-instruction-input"
+            placeholder="补充修图说明（可选，默认：严格保留产品原貌与印刷字样，去除背景与杂物，纯白底居中占约 85%）"
+          />
+          <div class="model-pick" id="whitebg-models">
+            <span style="font-size:13px;color:var(--ink-soft);">白底真修模型：</span>
+            <label data-model="doubao" class="checked"><input type="checkbox" value="doubao" checked /> 豆包（推荐 · 约12s）</label>
+            <label data-model="banana"><input type="checkbox" value="banana" /> Banana（Gemini）</label>
+            <label data-model="chatgpt"><input type="checkbox" value="chatgpt" /> ChatGPT</label>
+            <button class="btn btn-primary btn-sm" id="btn-fix-whitebg" type="button">开始白底真修</button>
+          </div>
+        </div>
+
+        <div id="whitebg-runtime-slot"></div>
+        <div class="whitebg-results" id="whitebg-results"></div>
+
+        <div class="saved-bar" id="whitebg-saved"></div>
+      </div>
+
       <div class="section-block" id="upload-library">
-        <h3>自有图入库 <span class="tag">外源上传</span></h3>
-        <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">把别处生成的图上传到「亚马逊产品图片」分类目录，挂到对应规划框，可再精改、加入预览。</p>
+        <h3>自有图入库 <span class="tag">2000×2000 PNG/JPG</span></h3>
+        <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">把外部做好的图片上传入库（自动统一为 2000×2000 .png/.jpg，存入「{产品名}/过程图/」），挂到对应规划框，也可作为白底真修原图或加入预览定稿。</p>
         <div class="upload-lib-row">
-          <label>分类
+          <label>挂入规划框
             <select id="upload-kind">
               <option value="main">主图</option>
               <option value="detail">细节图</option>
@@ -77,36 +121,11 @@
               <option value="refine">精改版本</option>
             </select>
           </label>
-          <label class="file-btn">选择图片
-            <input type="file" id="upload-files" accept="image/png,image/jpeg,image/webp,image/jpg" multiple hidden />
-          </label>
-          <button class="btn btn-primary btn-sm" id="btn-upload-own" type="button">上传入库</button>
+          <input type="file" id="upload-files" accept="image/png,image/jpeg,image/webp" multiple hidden />
+          <button class="btn btn-primary btn-sm" id="btn-upload-own" type="button">选择图片并入库</button>
           <span id="upload-status" class="voc-status"></span>
         </div>
         <div class="upload-lib-thumbs" id="upload-lib-thumbs"></div>
-      </div>
-
-      <div class="archive-grid" id="archive-grid"></div>
-
-      <div class="section-block" id="whitebg-section">
-        <h3>白底图预处理 <span class="tag tag-mock" id="whitebg-mode-tag">模拟预览</span></h3>
-        <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">用户上传产品白底图 1…n → 勾选大模型修图 → 对比结果 → 勾选优选入库（当前为流程模拟）</p>
-
-        <div class="whitebg-upload" id="whitebg-uploads"></div>
-
-        <div class="model-pick" id="whitebg-models">
-          <span style="font-size:13px;color:var(--ink-soft);">修白底图模型：</span>
-          <label data-model="chatgpt"><input type="checkbox" value="chatgpt" /> ChatGPT</label>
-          <label data-model="banana" class="checked"><input type="checkbox" value="banana" checked /> Banana</label>
-          <label data-model="doubao" class="checked"><input type="checkbox" value="doubao" checked /> 豆包</label>
-          <button class="btn btn-primary btn-sm" id="btn-fix-whitebg" type="button">开始修白底图（模拟）</button>
-        </div>
-
-        <div class="whitebg-results" id="whitebg-results"></div>
-
-        <div class="saved-bar" id="whitebg-saved">
-          ✓ 已记录白底图偏好（白底自动修图暂为模拟，偏好保存在本机浏览器）
-        </div>
       </div>
     </section>
 
@@ -115,10 +134,12 @@
       <div class="layer-arrow"></div>
       <div class="layer-head">
         <div class="layer-num">2</div>
-        <h2>图片规划</h2>
+        <h2>图片规划与受控图生图</h2>
         <span class="tag tag-demo" data-mode-tag>演示数据</span>
-        <div class="hint">档案 + 已选白底图 → 安然场景图 / 秋霜主图·细节·尺寸 · 每框含文字策划 + 生图提示词</div>
+        <div class="hint">档案 + 已锁定白底基准图 → 秋霜主图·细节·尺寸 / 安然场景图（落盘「过程图/」2000×2000）</div>
       </div>
+
+      <div id="whitebg-lock-banner" class="whitebg-lock-banner"></div>
 
       <div class="plan-tracks">
         <div class="track" id="track-qiushuang">
@@ -147,12 +168,11 @@
         <div class="layer-num">3</div>
         <h2>多模型生成 + 精改支线</h2>
         <span class="tag tag-demo" data-mode-tag>演示数据</span>
-        <div class="hint">在上方每个图片框内点「生成图片」框选模型；精改在框内支线对话产出 v2 / v3</div>
+        <div class="hint">全部生成与精改强制绑定「已精修白底产品图」i2i · 统一输出 2000×2000 PNG/JPG</div>
       </div>
       <p style="margin:0;font-size:13px;color:var(--ink-soft);">
-        操作说明：打开任一图片框 → <strong>生成图片</strong> → 勾选 豆包 / Banana（推荐）或 ChatGPT →
-        <strong>勾选最满意的一张</strong> → 若不满意点 <strong>精改支线</strong>（自有上传图也可选豆包/Banana 重新精改出图）→
-        勾选结果后点 <strong>加入预览</strong>。
+        操作流程：先在第 1 层完成 <strong>白底真修</strong> 锁定产品本体 → 在任一规划框点 <strong>生成图片</strong>（豆包 / Banana）→
+        <strong>勾选最满意的一张</strong> → 如需微调点 <strong>精改支线</strong> → 勾选结果后点 <strong>加入预览</strong>（自动写入「最终版本/」）。
       </p>
       <div id="gen-summary" style="margin-top:12px;font-size:12px;color:var(--muted);"></div>
     </section>
@@ -162,15 +182,16 @@
       <div class="layer-arrow"></div>
       <div class="layer-head">
         <div class="layer-num">4</div>
-        <h2>预览框 · 亚马逊 7 图顺序</h2>
+        <h2>预览框 · 亚马逊 7 图定稿（最终版本）</h2>
         <span class="tag tag-demo" data-mode-tag>演示数据</span>
-        <div class="hint">从上层勾选加入 · 拖拽调序 · 增删</div>
+        <div class="hint">加入预览即写入「{产品名}/最终版本/」· 支持拖拽调序</div>
       </div>
 
       <div class="preview-toolbar">
-        <button class="btn btn-sm" id="btn-auto-fill" type="button">一键填入已选图（演示）</button>
+        <button class="btn btn-sm" id="btn-auto-fill" type="button">一键填入已选图</button>
+        <button class="btn btn-primary btn-sm" id="btn-sync-final" type="button">同步定稿至「最终版本/」</button>
         <button class="btn btn-ghost btn-sm" id="btn-clear-preview" type="button">清空预览</button>
-        <span style="font-size:12px;color:var(--muted);">拖拽卡片可改顺序 · 状态自动写入 localStorage</span>
+        <span id="preview-sync-status" class="voc-status"></span>
       </div>
 
       <div class="preview-slots" id="preview-slots"></div>
@@ -179,31 +200,33 @@
 
   <p class="footer-note">
     AI 做图看板 · <a href="../tool/">← 总工作台</a> ·
-    落盘 Mac「亚马逊产品图片」· 后端 <code>/image-board-api</code>
+    落盘 Mac「亚马逊产品图片/{产品名}/{过程图|白底图|最终版本}」（2000×2000 PNG/JPG）· 后端 <code>/image-board-api</code>
   </p>
 
   <!-- Generate modal -->
   <div class="modal-backdrop" id="gen-modal" role="dialog" aria-modal="true">
     <div class="modal">
       <h3>选择生图模型</h3>
-      <p id="gen-modal-desc">勾选模型。豆包 / Banana 优先；ChatGPT 若额度不足会明确提示。</p>
+      <p id="gen-modal-desc">勾选模型。所有模型均强制使用已锁定的精修白底图作为产品本体（禁止空想魔改）。</p>
+      <div id="gen-modal-ref" class="modal-ref-card"></div>
       <div class="modal-models" id="gen-modal-models">
-        <label data-model="doubao" class="checked"><input type="checkbox" value="doubao" checked /> 豆包（火山方舟 · 快速稳定）</label>
-        <label data-model="banana" class="checked"><input type="checkbox" value="banana" checked /> Banana（Gemini 生图）</label>
+        <label data-model="doubao" class="checked"><input type="checkbox" value="doubao" checked /> 豆包（火山方舟 · 2K图生图快速稳定）</label>
+        <label data-model="banana" class="checked"><input type="checkbox" value="banana" checked /> Banana（Gemini 图生图）</label>
         <label data-model="chatgpt"><input type="checkbox" value="chatgpt" /> ChatGPT</label>
       </div>
       <div class="modal-foot">
         <button class="btn btn-ghost" id="gen-modal-cancel" type="button">取消</button>
-        <button class="btn btn-primary" id="gen-modal-ok" type="button">开始生成</button>
+        <button class="btn btn-primary" id="gen-modal-ok" type="button">开始生成（2000×2000）</button>
       </div>
     </div>
   </div>
 
   <div class="toast" id="toast"></div>
 
-  <script src="js/api-config.js?v=imgboard-3"></script>
-  <script src="js/api.js?v=imgboard-3"></script>
-  <script src="js/demo-data.js?v=imgboard-3"></script>
-  <script src="js/app.js?v=imgboard-3"></script>
+  <script src="js/api-config.js?v=imgboard-4"></script>
+  <script src="js/api.js?v=imgboard-4"></script>
+  <script src="js/demo-data.js?v=imgboard-4"></script>
+  <script src="js/whitebg.js?v=imgboard-4"></script>
+  <script src="js/app.js?v=imgboard-4"></script>
 </body>
 </html>
