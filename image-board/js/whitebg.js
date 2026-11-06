@@ -132,17 +132,16 @@ window.BoardWhitebg = {
       }
       wrap.innerHTML =
         `<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--ink-soft);">
-          <span>点击任意已入库图片加入待修原图（默认自动勾选）：</span>
+          <span>点图片放大 · 点名称加入待修原图（默认自动勾选）：</span>
           <button type="button" class="btn btn-ghost btn-sm" id="btn-close-board-picker">收起</button>
         </div>
         <div class="picker-list">` +
         candidates
           .map((c, i) => {
             const full = API.fileUrl(c.imageUrl);
-            return `<div class="picker-item" data-pick-board-idx="${i}" title="${escapeHtml(c.label)}">
+            return `<div class="picker-item" data-pick-board-idx="${i}" title="${escapeHtml(c.label)} · 点图放大 · 点名称加入待修">
               <div class="picker-thumb-wrap">
-                <img src="${escapeHtml(full)}" alt="${escapeHtml(c.label)}" />
-                <button type="button" class="mini-zoom-btn" data-lightbox-src="${escapeHtml(full)}" data-lightbox-title="${escapeHtml(c.label)}" title="页内放大查看">🔍</button>
+                <img src="${escapeHtml(full)}" alt="${escapeHtml(c.label)}" data-lightbox-src="${escapeHtml(full)}" data-lightbox-title="${escapeHtml(c.label)}" />
               </div>
               <div class="p-meta">${escapeHtml(c.label)}</div>
             </div>`;
@@ -305,7 +304,6 @@ window.BoardWhitebg = {
               <div>2000×2000 · ${(item.ext || "png").toUpperCase()}</div>
               <div class="wb-card-links">
                 <button type="button" class="link-btn" data-only-wb="${escapeHtml(item.id)}" title="仅单选这一张">单选此张</button>
-                <button type="button" class="link-btn" data-lightbox-src="${escapeHtml(fullUrl)}" data-lightbox-title="${escapeHtml(titleStr)}">放大查看</button>
               </div>
             </div>
           </div>`;
@@ -317,7 +315,7 @@ window.BoardWhitebg = {
           <div>
             <strong>豆包 · 白底真修图库（共 ${items.length} 张）</strong>
             <span class="tag tag-real" style="margin-left:6px;">真实 · 白底图/</span>
-            <span style="font-size:11.5px;color:var(--muted);margin-left:8px;">点缩略图页内放大 · 点左上角勾选框可单选或多选 · 点 × 直接删除</span>
+            <span style="font-size:11.5px;color:var(--muted);margin-left:8px;">点图片放大 · 点左上角名称勾选 · 点 × 删除</span>
           </div>
           <div class="wb-sel-tools">
             <span style="font-size:12px;color:var(--green);font-weight:600;">已勾选 ${selectedRefs.length} 张</span>
@@ -339,7 +337,7 @@ window.BoardWhitebg = {
           .slice(0, 6)
           .map((r) => {
             const u = API.fileUrl(r.imageUrl);
-            return `<img src="${escapeHtml(u)}" alt="${escapeHtml(r.label)}" data-lightbox-src="${escapeHtml(u)}" data-lightbox-title="${escapeHtml(r.label)}" title="${escapeHtml(r.label)}（点击放大）" />`;
+            return `<img src="${escapeHtml(u)}" alt="${escapeHtml(r.label)}" data-lightbox-src="${escapeHtml(u)}" data-lightbox-title="${escapeHtml(r.label)}" title="${escapeHtml(r.label)}" />`;
           })
           .join("");
         const verSummary = selectedRefs.map((r) => `v${r.version}`).join("、");

@@ -19,12 +19,13 @@
   function defaultState() {
     return {
       mode: "demo",
-      source: "demo",
+      source: "amazon",
       asin: DEMO.product.asin,
       productName: DEMO.product.name,
       productDir: DEMO.product.name,
       taskId: null,
       archiveOverride: null,
+      productSummary: "",
       whitebgSources: [],
       whitebgSelectedSourceIds: [],
       whitebgSelectedSourceId: null,
@@ -38,6 +39,14 @@
       genTargetBoxId: null,
       lastSavePath: null,
       planBoxes: null,
+      sevenImagePlan: null,
+      sevenPlanSource: null,
+      sevenPlanAuthor: null,
+      sevenPlanFile: null,
+      sevenPlanStatus: null,
+      sevenPlanStatusLabel: null,
+      sevenThemeChat: {},
+      sevenThemeBusy: {},
     };
   }
 
@@ -68,6 +77,11 @@
 
   function normalizeState(raw) {
     const s = Object.assign(defaultState(), raw || {});
+    // Archive source UI only keeps 亚马逊 VOC; migrate legacy etsy/demo tabs
+    if (s.source !== "amazon") {
+      s.source = "amazon";
+    }
+    if (typeof s.productSummary !== "string") s.productSummary = "";
     if (!Array.isArray(s.whitebgSources)) s.whitebgSources = [];
     if (!Array.isArray(s.whitebgResults)) s.whitebgResults = [];
     s.whitebgResults = s.whitebgResults.filter((r) => r && r.imageUrl && !r.mock);
@@ -264,6 +278,7 @@
   function currentPlans() {
     if (isRealMode() && state.planBoxes && state.planBoxes.length) return state.planBoxes;
     if (state.planBoxes && state.planBoxes.length && state.mode === "real") return state.planBoxes;
+    if (state.planBoxes && state.planBoxes.length && state.productSummary) return state.planBoxes;
     return [...DEMO.qiushuang, ...DEMO.anran];
   }
 
@@ -271,14 +286,34 @@
     return currentPlans().find((b) => b.id === boxId);
   }
 
+  function ensureProductSummaryInText(text, isMain) {
+    const summary = (state.productSummary || "").trim();
+    if (!summary) return text || "";
+    const marker = "【产品总结·人工导入】";
+    let body = (text || "").trim();
+    if (body.includes(marker)) {
+      body = body.split(marker)[0].trim();
+    }
+    const block = isMain
+      ? `${marker}\n以下消费者在意点只能靠产品本体构图传达（主图零叠字，禁止写成画面文字）：\n${summary}`
+      : `${marker}\n下游出图 AI 必须分析并呼应以下人工产品总结（卖点/在意点）：\n${summary}`;
+    return body ? `${body}\n\n${block}` : block;
+  }
+
   function getEffectiveBrief(plan, box) {
-    if (box && typeof box.briefOverride === "string" && box.briefOverride.trim()) return box.briefOverride;
-    return (plan && plan.brief) || "";
+    let base = box && typeof box.briefOverride === "string" && box.briefOverride.trim()
+      ? box.briefOverride
+      : (plan && plan.brief) || "";
+    const isMain = (plan && plan.badge === "主图") || (plan && String(plan.id || "").startsWith("qs-main"));
+    return ensureProductSummaryInText(base, !!isMain);
   }
 
   function getEffectivePrompt(plan, box) {
-    if (box && typeof box.promptOverride === "string" && box.promptOverride.trim()) return box.promptOverride;
-    return (plan && plan.prompt) || "";
+    let base = box && typeof box.promptOverride === "string" && box.promptOverride.trim()
+      ? box.promptOverride
+      : (plan && plan.prompt) || "";
+    const isMain = (plan && plan.badge === "主图") || (plan && String(plan.id || "").startsWith("qs-main"));
+    return ensureProductSummaryInText(base, !!isMain);
   }
 
   function setPlanPrompt(boxId, nextPrompt) {
@@ -420,13 +455,283 @@
   }
 
   function activeArchive() {
-    if (state.source === "etsy") return DEMO.archives.etsy;
-    if (state.source === "demo") return DEMO.archives.amazon;
     if (state.archiveOverride) return state.archiveOverride;
     return DEMO.archives.amazon;
   }
 
-  function renderArchive() {
+  function activeSevenPlan() {
+    if (Array.isArray(state.sevenImagePlan) && state.sevenImagePlan.length) return state.sevenImagePlan;
+    const arch = activeArchive();
+    if (arch && Array.isArray(arch.sevenImagePlan) && arch.sevenImagePlan.length) return arch.sevenImagePlan;
+    return null;
+  }
+
+  function syncPlanBoxesFromSeven() {
+    const seven = state.sevenImagePlan;
+    if (!Array.isArray(seven) || !seven.length || !Array.isArray(state.planBoxes)) return;
+    seven.forEach((row) => {
+      const box = state.planBoxes.find((b) => Number(b.imageIndex) === Number(row.imageIndex) || b.id === row.boxId);
+      if (!box) return;
+      box.focusDisplay = row.focusDisplay;
+      box.vocEvidence = row.vocEvidence;
+      box.visualNotes = row.visualNotes;
+      box.primaryTheme = row.primaryTheme;
+      box.secondaryThemes = row.secondaryThemes || [];
+      if (row.allowOverlay === false || row.imageIndex === 1) {
+        // main: keep sanitized prompt; only refresh focus note inside brief tip is handled server-side on reimport
+        return;
+      }
+      const pt = row.primaryTheme || {};
+      const secs = row.secondaryThemes || [];
+      const exact = [pt.en].concat(secs.map((s) => s && s.en).filter(Boolean)).filter(Boolean);
+      const secLines = secs
+        .map((s, i) => `${i + 1}. ${s.zh || ""} → 英文: "${s.en || ""}"；画面：${s.panel || ""}`)
+        .join("\n");
+      box.brief =
+        `【图号/槽位】图${row.imageIndex} · ${row.slot || row.badge || ""}\n` +
+        `【主主题·重点展示】${pt.zh || row.focusDisplay || ""} → 英文大标题: "${pt.en || ""}"\n` +
+        `【次主题】\n${secLines}\n` +
+        `【VOC 依据】${row.vocEvidence || ""}\n` +
+        `【画面英文叠字 exact】${exact.map((e) => `"${e}"`).join("; ")}\n` +
+        `【配图说明】${row.visualNotes || ""}`;
+      const support = secs.map((s) => s && s.en).filter(Boolean);
+      const supportLine = support.length
+        ? `Supporting on-image callouts / panel labels (exact): ${support.map((e) => `"${e}"`).join("; ")}`
+        : "";
+      const primaryLine = pt.en ? `Primary on-image headline (exact): "${pt.en}"` : "";
+      // Replace or append theme block in prompt
+      let prompt = box.prompt || "";
+      prompt = prompt.replace(/Primary on-image headline \(exact\):[^\n]*/i, "").replace(/Supporting on-image callouts \/ panel labels \(exact\):[^\n]*/i, "").replace(/Layout: one visual center[^\n]*/i, "");
+      prompt = prompt.replace(/\n{3,}/g, "\n\n").trim();
+      box.prompt = `${prompt}\n${primaryLine}\n${supportLine}\nLayout: one visual center for the primary theme; supporting panels only illustrate that theme.`.replace(/\n{3,}/g, "\n\n").trim();
+      box.vocCallouts = exact;
+      box.title = `图${row.imageIndex} · ${row.slot || row.badge || ""} · ${pt.zh || row.focusDisplay || ""}`;
+    });
+  }
+
+  function renderSevenImagePlan(isRealCard) {
+    const seven = activeSevenPlan();
+    const src = state.sevenPlanSource || (activeArchive() && activeArchive().sevenPlanSource) || "";
+    const author = state.sevenPlanAuthor || (activeArchive() && activeArchive().sevenPlanAuthor) || "";
+    const status = state.sevenPlanStatus || (activeArchive() && activeArchive().sevenPlanStatus) || (src === "authored" ? "final" : "draft_pending");
+    const statusLabel =
+      state.sevenPlanStatusLabel ||
+      (activeArchive() && activeArchive().sevenPlanStatusLabel) ||
+      (status === "final" ? "定稿" : status === "authored_pending_final" ? "定稿优先（待终审）" : "待秋霜+安然规划");
+    const isAuthored = src === "authored";
+    const isDraft = status === "draft_pending";
+    const tagClass = isDraft ? "tag-demo" : "tag-real";
+
+    if (!seven || !seven.length) {
+      return `<div class="seven-plan seven-plan-empty-wrap" style="grid-column:1/-1">
+        <div class="seven-plan-head"><h3>VOC → 七图主题规划</h3>
+          <span class="tag tag-demo">待秋霜+安然规划</span></div>
+        <div class="seven-plan-empty">导入真实 VOC 后，将按图1→图7横向展示主题卡片（可滚动）；无定稿前为自动草稿，须秋霜+安然定稿后才当终稿。</div>
+      </div>`;
+    }
+
+    const cards = seven
+      .map((row) => {
+        const idx = row.imageIndex;
+        const isMain = idx === 1 || row.allowOverlay === false;
+        const who = row.owner || (idx <= 3 ? "秋霜" : "安然");
+        const pt = row.primaryTheme || {};
+        const secs = row.secondaryThemes || [];
+        const chat = (state.sevenThemeChat && state.sevenThemeChat[idx]) || [];
+        const busy = !!(state.sevenThemeBusy && state.sevenThemeBusy[idx]);
+        const themeView = isMain
+          ? `<div class="seven-theme-main"><span class="seven-label">重点展示（构图）</span><textarea class="seven-input" data-seven-idx="${idx}" data-seven-field="focusDisplay" rows="3">${escapeHtml(row.focusDisplay || "")}</textarea><div class="seven-hint">主图零叠字：只写实物构图，不出现画面大标题编辑</div></div>`
+          : `<div class="seven-theme">
+              <div><span class="seven-label">主主题 · 重点展示</span>
+                <input class="seven-input" data-seven-idx="${idx}" data-seven-field="primaryZh" value="${escapeHtml(pt.zh || row.focusDisplay || "")}" />
+                <input class="seven-input seven-en" data-seven-idx="${idx}" data-seven-field="primaryEn" value="${escapeHtml(pt.en || "")}" placeholder="英文大标题 ≤6 words" />
+              </div>
+              <div class="seven-sec-list"><span class="seven-label">次主题</span>
+                <textarea class="seven-input" data-seven-idx="${idx}" data-seven-field="secondaryText" rows="3" placeholder="每行：中文 | 英文 | 画面说明">${escapeHtml(
+                  secs.map((s) => `${s.zh || ""} | ${s.en || ""} | ${s.panel || ""}`).join("\n")
+                )}</textarea>
+              </div>
+            </div>`;
+        const chatLog =
+          chat.length > 0
+            ? `<div class="seven-theme-chat-log">${chat
+                .map(
+                  (m) =>
+                    `<div class="seven-chat-bubble ${m.role === "user" ? "is-user" : "is-bot"}"><b>${escapeHtml(
+                      m.role === "user" ? "Hongyan" : m.who || who
+                    )}</b>：${escapeHtml(m.content || "")}</div>`
+                )
+                .join("")}</div>`
+            : `<div class="seven-theme-chat-empty">向${escapeHtml(who)}说重点展示怎么改（不自动生图）</div>`;
+        return `<article class="seven-card ${isMain ? "is-main" : ""}" data-seven-idx="${idx}">
+          <header class="seven-card-head">
+            <div class="seven-idx">图${idx}</div>
+            <div class="seven-slot">${escapeHtml(row.slot || row.badge || "")}</div>
+            <span class="seven-owner">负责人 · ${escapeHtml(who)}</span>
+          </header>
+          <div class="seven-card-body">
+            ${themeView}
+            <div class="seven-field"><span class="seven-label">VOC 依据</span>
+              <textarea class="seven-input" data-seven-idx="${idx}" data-seven-field="vocEvidence" rows="2">${escapeHtml(row.vocEvidence || "")}</textarea>
+            </div>
+            <div class="seven-field"><span class="seven-label">配图说明</span>
+              <textarea class="seven-input" data-seven-idx="${idx}" data-seven-field="visualNotes" rows="2">${escapeHtml(row.visualNotes || "")}</textarea>
+            </div>
+            <div class="seven-theme-chat" data-seven-chat="${idx}">
+              <div class="seven-theme-chat-head">和${escapeHtml(who)}改重点展示</div>
+              ${chatLog}
+              <div class="seven-theme-chat-input-row">
+                <input type="text" class="seven-input seven-theme-chat-input" data-seven-chat-input="${idx}" placeholder="例如：重点展示改成……" ${busy ? "disabled" : ""} />
+                <button type="button" class="btn btn-sm btn-outline-accent" data-action="send-seven-theme-chat" data-seven-idx="${idx}" ${busy ? "disabled" : ""}>${
+                  busy ? "发送中…" : "发给" + who
+                }</button>
+              </div>
+            </div>
+          </div>
+        </article>`;
+      })
+      .join("");
+
+    const sub = isDraft
+      ? "当前为自动归纳草稿，状态「待秋霜+安然规划」——Hongyan 勿当终稿。图1–3 找秋霜、图4–7 找安然在卡片内对话改重点展示。"
+      : isAuthored
+        ? `定稿优先已载入（${escapeHtml(author || "秋霜+安然")}）。横向图1→图7；卡片内可与负责人对话改重点展示（不自动生图）。`
+        : "七图主题横向排布；放不下请左右滑动。";
+
+    return `<div class="seven-plan" style="grid-column:1/-1">
+      <div class="seven-plan-head">
+        <h3>VOC → 七图主题规划</h3>
+        <span class="tag ${tagClass}" data-seven-status="${escapeHtml(status)}">${escapeHtml(statusLabel)}</span>
+        ${isDraft ? `<span class="tag tag-demo">待确认草稿</span>` : ""}
+        ${isAuthored && !isDraft ? `<span class="tag tag-real">定稿优先</span>` : ""}
+      </div>
+      <p class="seven-plan-sub">${sub}</p>
+      <div class="seven-hscroll" tabindex="0" aria-label="七图主题横向滚动">
+        <div class="seven-track">${cards}</div>
+      </div>
+    </div>`;
+  }
+
+  function onSevenPlanEdit(e) {
+    const el = e.target;
+    if (!el || !el.dataset || !el.dataset.sevenIdx) return;
+    const idx = Number(el.dataset.sevenIdx);
+    const field = el.dataset.sevenField;
+    if (!state.sevenImagePlan) return;
+    const row = state.sevenImagePlan.find((r) => Number(r.imageIndex) === idx);
+    if (!row) return;
+    const val = el.value;
+    if (field === "focusDisplay") row.focusDisplay = val;
+    else if (field === "vocEvidence") row.vocEvidence = val;
+    else if (field === "visualNotes") row.visualNotes = val;
+    else if (field === "primaryZh") {
+      row.primaryTheme = row.primaryTheme || {};
+      row.primaryTheme.zh = val;
+      row.focusDisplay = val;
+    } else if (field === "primaryEn") {
+      row.primaryTheme = row.primaryTheme || {};
+      row.primaryTheme.en = val;
+    } else if (field === "secondaryText") {
+      row.secondaryThemes = val
+        .split("\n")
+        .map((ln) => ln.trim())
+        .filter(Boolean)
+        .map((ln) => {
+          const parts = ln.split("|").map((x) => x.trim());
+          return { zh: parts[0] || "", en: parts[1] || "", panel: parts[2] || "", kind: "edit" };
+        });
+    }
+    syncPlanBoxesFromSeven();
+    // soft re-render plans only
+    if (typeof renderPlans === "function") renderPlans();
+  }
+
+  async function sendSevenThemeChat(idx) {
+    idx = Number(idx);
+    if (!idx || !state.sevenImagePlan) return;
+    const row = state.sevenImagePlan.find((r) => Number(r.imageIndex) === idx);
+    if (!row) return;
+    const input = document.querySelector(`[data-seven-chat-input="${idx}"]`);
+    const userMsg = ((input && input.value) || "").trim();
+    if (!userMsg) {
+      toast("请先输入重点展示修改意见");
+      return;
+    }
+    const who = row.owner || (idx <= 3 ? "秋霜" : "安然");
+    state.sevenThemeChat = state.sevenThemeChat || {};
+    state.sevenThemeChat[idx] = state.sevenThemeChat[idx] || [];
+    state.sevenThemeChat[idx].push({ role: "user", content: userMsg, who: "Hongyan" });
+    state.sevenThemeBusy = state.sevenThemeBusy || {};
+    state.sevenThemeBusy[idx] = true;
+    if (input) input.value = "";
+    renderArchive();
+    try {
+      const box = (state.planBoxes || []).find((b) => Number(b.imageIndex) === idx) || {};
+      const res = await API.post(
+        "/api/seven-theme-chat",
+        {
+          imageIndex: idx,
+          userMessage: userMsg,
+          slot: row.slot || row.badge,
+          row,
+          asin: state.asin,
+          productName: state.productName,
+          prompt: box.prompt || "",
+          messages: (state.sevenThemeChat[idx] || []).slice(-8).map((m) => ({
+            role: m.role === "user" ? "user" : "assistant",
+            content: m.content,
+          })),
+        },
+        { timeoutMs: 60000 }
+      );
+      if (!res || res.ok === false) throw new Error((res && res.error) || "主题对话失败");
+      // Write back theme fields — never auto-generate images
+      if (res.autoGenerate) {
+        console.warn("seven-theme-chat ignored autoGenerate");
+      }
+      const next = res.row || {};
+      Object.assign(row, {
+        focusDisplay: res.focusDisplay != null ? res.focusDisplay : next.focusDisplay,
+        primaryTheme: res.primaryTheme !== undefined ? res.primaryTheme : next.primaryTheme,
+        secondaryThemes: res.secondaryThemes || next.secondaryThemes || row.secondaryThemes,
+        vocEvidence: res.vocEvidence != null ? res.vocEvidence : next.vocEvidence,
+        visualNotes: res.visualNotes != null ? res.visualNotes : next.visualNotes,
+        owner: who,
+      });
+      // sync linked planBox brief/prompt
+      if (Array.isArray(state.planBoxes)) {
+        const b = state.planBoxes.find((x) => Number(x.imageIndex) === idx);
+        if (b) {
+          if (res.brief) b.brief = res.brief;
+          if (res.prompt && idx !== 1) b.prompt = res.prompt;
+          b.focusDisplay = row.focusDisplay;
+          b.primaryTheme = row.primaryTheme;
+          b.secondaryThemes = row.secondaryThemes;
+          b.vocEvidence = row.vocEvidence;
+          b.visualNotes = row.visualNotes;
+          if (idx !== 1) {
+            b.title = `图${idx} · ${row.slot || row.badge || ""} · ${(row.primaryTheme && row.primaryTheme.zh) || row.focusDisplay || ""}`;
+          }
+        }
+      }
+      syncPlanBoxesFromSeven();
+      state.sevenThemeChat[idx].push({ role: "assistant", content: res.reply || "已更新主题", who });
+      toast(`${who}已更新图${idx}主题（未生图）`);
+    } catch (err) {
+      state.sevenThemeChat[idx].push({
+        role: "assistant",
+        content: "对话失败：" + (err.message || String(err)),
+        who,
+      });
+      toast("主题对话失败：" + (err.message || String(err)), { duration: 4000 });
+    } finally {
+      state.sevenThemeBusy[idx] = false;
+      renderArchive();
+      if (typeof renderPlans === "function") renderPlans();
+    }
+  }
+
+    function renderArchive() {
     const data = activeArchive();
     const isRealCard = isRealMode() && state.source === "amazon" && !!state.archiveOverride;
     document.getElementById("source-label").textContent = (data.label || "") + (isRealCard ? " · 真实导入" : " · 演示数据");
@@ -440,6 +745,7 @@
       { key: "reason", title: "选择理由", cls: "reason", items: data.reason || [] },
     ];
     document.getElementById("archive-grid").innerHTML =
+      renderSevenImagePlan(isRealCard) +
       cards
         .map(
           (c) => `
@@ -449,7 +755,21 @@
       </article>`
         )
         .join("") +
-      `<div class="archive-map" style="grid-column:1/-1">字段映射：${escapeHtml(data.note || "")}</div>`;
+      `<div class="archive-map" style="grid-column:1/-1">字段映射：${escapeHtml(data.note || "")} · 七图规划见上方（规范：amazon_secondary_image_voc_callout_rules.md）</div>`;
+    const grid = document.getElementById("archive-grid");
+    if (grid && !grid._sevenBound) {
+      grid.addEventListener("change", onSevenPlanEdit);
+      grid.addEventListener("blur", onSevenPlanEdit, true);
+      grid.addEventListener("keydown", (ev) => {
+        const t = ev.target;
+        if (!t || !t.dataset || !t.dataset.sevenChatInput) return;
+        if (ev.key === "Enter") {
+          ev.preventDefault();
+          sendSevenThemeChat(t.dataset.sevenChatInput);
+        }
+      });
+      grid._sevenBound = true;
+    }
   }
 
   function plansByWho() {
@@ -526,8 +846,7 @@
                 <div class="meta" data-select-gen="${escapeHtml(r.id)}" data-box="${escapeHtml(plan.id)}">
                   <div class="meta-line">${escapeHtml(r.label || `${m.name} ${vTag}`)}</div>
                   <div class="gen-card-ops">
-                    <span class="pick-txt">${sel ? "✓ 已选" : "点此勾选"}</span>
-                    ${fullUrl ? `<button type="button" class="link-btn" data-lightbox-src="${escapeHtml(fullUrl)}" data-lightbox-title="${escapeHtml(zoomTitle)}">放大</button>` : ""}
+                    <span class="pick-txt">${sel ? "✓ 已选" : "未选"}</span>
                   </div>
                 </div>
               </div>`;
@@ -813,11 +1132,33 @@
       toast("预览框中暂无图片可下载");
       return;
     }
-    toast(`开始下载 ${filled.length} 张预览定稿图…`);
-    for (let i = 0; i < filled.length; i++) {
-      const { item, idx } = filled[i];
-      await API.triggerDownload(item.imageUrl, buildPreviewFilename(item, idx));
-      await new Promise((r) => setTimeout(r, 250));
+    const dlAllBtn = document.getElementById("btn-download-all-preview");
+    if (dlAllBtn) dlAllBtn.disabled = true;
+    const asinPart = (state.asin || "PRODUCT").replace(/[^A-Za-z0-9_-]/g, "") || "PRODUCT";
+    const zipName = `${asinPart}_Listing_preview_${filled.length}imgs.zip`;
+    toast(`正在打包 ${filled.length} 张预览图为压缩包…`);
+    try {
+      const items = filled.map(({ item, idx }) => ({
+        imageUrl: item.imageUrl,
+        filename: buildPreviewFilename(item, idx),
+        slot: idx + 1,
+        title: item.title || `slot${idx + 1}`,
+      }));
+      const res = await API.postBlob(
+        "/api/preview/zip",
+        { items, asin: state.asin || asinPart, zipName, productName: state.productName || "" },
+        { timeoutMs: 120000 }
+      );
+      API.downloadBlob(res.blob, zipName);
+      const n = res.zipCount || filled.length;
+      toast(`已下载压缩包（${n} 张）：${zipName}`);
+    } catch (e) {
+      toast(`打包下载失败：${(e && e.message) || e}`);
+    } finally {
+      if (dlAllBtn) {
+        const hasFilled = state.preview.some((it) => it && it.imageUrl);
+        dlAllBtn.disabled = !hasFilled;
+      }
     }
   }
 
@@ -904,7 +1245,7 @@
         const u = API.fileUrl(wbRef.imageUrl);
         refCard.innerHTML = `<img src="${escapeHtml(u)}" alt="${escapeHtml(wbRef.label)}" data-lightbox-src="${escapeHtml(u)}" data-lightbox-title="绑定白底产品基准图 · ${escapeHtml(wbRef.label)}" />
           <div>
-            <div><strong>🔒 强制绑定产品本体：${escapeHtml(wbRef.label)}</strong>（点缩略图可页内放大）</div>
+            <div><strong>🔒 强制绑定产品本体：${escapeHtml(wbRef.label)}</strong></div>
             <div style="font-size:11px;opacity:.9;">严格保持原产品外形/结构/颜色/比例/材质不变；提示词写 v1/v3/v6 可自动传多张参考图</div>
           </div>`;
       }
@@ -1381,7 +1722,93 @@
     input.click();
   }
 
-  async function importVoc() {
+  function syncProductDataPanel() {
+    const panel = document.getElementById("product-data-panel");
+    const ta = document.getElementById("product-data-text");
+    if (ta && document.activeElement !== ta) {
+      ta.value = state.productSummary || "";
+    }
+    if (panel && state.productSummary && panel.hasAttribute("hidden") === false) {
+      /* keep open if user opened it */
+    }
+  }
+
+  async function applyProductData() {
+    const ta = document.getElementById("product-data-text");
+    const st = document.getElementById("product-data-status");
+    const btn = document.getElementById("btn-product-data-apply");
+    const text = ((ta && ta.value) || "").trim();
+    if (!text) {
+      if (st) { st.className = "voc-status err"; st.textContent = "请先粘贴产品总结"; }
+      toast("请先粘贴产品总结", { duration: 2500 });
+      return;
+    }
+    if (btn) btn.disabled = true;
+    if (st) { st.className = "voc-status"; st.textContent = "正在写入规划框…"; }
+    try {
+      const body = {
+        text,
+        asin: state.asin || undefined,
+        productName: state.productName || state.productDir || undefined,
+      };
+      if (state.archiveOverride && typeof state.archiveOverride === "object") {
+        body.archive = state.archiveOverride;
+      }
+      const res = await API.post("/api/product-data/import", body, { timeoutMs: 30000 });
+      state.productSummary = res.productSummary || text;
+      state.mode = "real";
+      state.source = "amazon";
+      state.archiveOverride = res.archive || state.archiveOverride;
+      state.sevenImagePlan = res.sevenImagePlan || null;
+      state.planBoxes = (res.planBoxes || []).map((b) =>
+        sanitizeCachedMainPlanBox(
+          {
+            ...b,
+            who: b.who || (["主图", "细节图", "尺寸图"].includes(b.badge) ? "秋霜" : "安然"),
+          },
+          state.asin,
+          state.productName
+        )
+      );
+      if (!state.asin) {
+        state.asin = res.asin || state.asin;
+      }
+      if (res.productName && (!state.productName || state.productName === DEMO.product.name)) {
+        state.productName = res.productName;
+        state.productDir = res.productDir || res.productName;
+      }
+      if (res.saved) state.lastSavePath = res.saved.category + "/" + res.saved.filename;
+      // Clear per-box overrides so injected summary is visible
+      Object.keys(state.boxes || {}).forEach((bid) => {
+        const b = state.boxes[bid];
+        if (!b) return;
+        b.briefOverride = null;
+        b.promptOverride = null;
+      });
+      saveState();
+      setModeUI();
+      renderArchive();
+      renderPlans();
+      renderPreview();
+      if (WB) { WB.renderUploads(); WB.renderResults(); }
+      const n = (state.planBoxes || []).length;
+      const parsed = res.parsed || {};
+      const itchN = (parsed.itch || []).length;
+      if (st) {
+        st.className = "voc-status ok";
+        st.textContent = `✓ 已写入 ${n} 个规划框（抽出在意点 ${itchN} 条；粘贴优先，VOC 补充）`;
+      }
+      toast(`产品总结已进入规划框 brief/prompt（${n} 框）`);
+    } catch (e) {
+      const msg = humanizeError(e, "voc");
+      if (st) { st.className = "voc-status err"; st.textContent = "失败：" + msg; }
+      toast("导入产品数据失败：" + msg, { duration: 4500 });
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+    async function importVoc() {
     if (vocImporting) return;
     const inputEl = document.getElementById("voc-query");
     const btnEl = document.getElementById("btn-voc-import");
@@ -1411,6 +1838,13 @@
       state.productName = res.productName || nextAsin;
       state.productDir = res.productDir || res.productName || nextAsin;
       state.archiveOverride = res.archive;
+      state.sevenImagePlan = res.sevenImagePlan || (res.archive && res.archive.sevenImagePlan) || null;
+      state.sevenPlanSource = res.sevenPlanSource || (res.archive && res.archive.sevenPlanSource) || null;
+      state.sevenPlanAuthor = res.sevenPlanAuthor || (res.archive && res.archive.sevenPlanAuthor) || null;
+      state.sevenPlanFile = res.sevenPlanFile || null;
+      state.sevenPlanStatus = res.sevenPlanStatus || (res.archive && res.archive.sevenPlanStatus) || null;
+      state.sevenPlanStatusLabel = res.sevenPlanStatusLabel || (res.archive && res.archive.sevenPlanStatusLabel) || null;
+      state.sevenThemeChat = state.sevenThemeChat || {};
       state.planBoxes = (res.planBoxes || []).map((b) =>
         sanitizeCachedMainPlanBox(
           {
@@ -1421,6 +1855,35 @@
           state.productName
         )
       );
+      // If user already pasted 产品总结, re-merge so VOC + paste both feed planBoxes
+      if ((state.productSummary || "").trim()) {
+        try {
+          const merged = await API.post(
+            "/api/product-data/import",
+            {
+              text: state.productSummary,
+              asin: nextAsin,
+              productName: state.productName,
+              archive: state.archiveOverride,
+            },
+            { timeoutMs: 30000 }
+          );
+          state.archiveOverride = merged.archive || state.archiveOverride;
+          state.sevenImagePlan = merged.sevenImagePlan || state.sevenImagePlan;
+          state.planBoxes = (merged.planBoxes || state.planBoxes).map((b) =>
+            sanitizeCachedMainPlanBox(
+              {
+                ...b,
+                who: b.who || (["主图", "细节图", "尺寸图"].includes(b.badge) ? "秋霜" : "安然"),
+              },
+              nextAsin,
+              state.productName
+            )
+          );
+        } catch (_) {
+          /* keep VOC planBoxes if re-merge fails */
+        }
+      }
       state.boxes = {};
       state.preview = [null, null, null, null, null, null, null];
       if (prevAsin !== nextAsin) {
@@ -1683,9 +2146,9 @@
     document.getElementById("source-toggle").addEventListener("click", (e) => {
       const btn = e.target.closest("button[data-source]");
       if (!btn) return;
-      const nextSrc = btn.dataset.source;
-      state.source = nextSrc;
-      state.mode = nextSrc === "amazon" && state.archiveOverride ? "real" : "demo";
+      // Only 亚马逊 VOC remains in the archive-source tabs
+      state.source = "amazon";
+      state.mode = state.archiveOverride ? "real" : "demo";
       saveState();
       setModeUI();
       renderArchive();
@@ -1698,6 +2161,47 @@
     document.getElementById("voc-query").addEventListener("keydown", (e) => {
       if (e.key === "Enter") { e.preventDefault(); importVoc(); }
     });
+
+    const btnPd = document.getElementById("btn-product-data");
+    const panelPd = document.getElementById("product-data-panel");
+    const taPd = document.getElementById("product-data-text");
+    if (btnPd && panelPd) {
+      btnPd.addEventListener("click", () => {
+        const open = !panelPd.hasAttribute("hidden");
+        if (open) panelPd.setAttribute("hidden", "");
+        else {
+          panelPd.removeAttribute("hidden");
+          syncProductDataPanel();
+          if (taPd) taPd.focus();
+        }
+      });
+    }
+    const btnApply = document.getElementById("btn-product-data-apply");
+    if (btnApply) btnApply.addEventListener("click", () => applyProductData());
+    const btnClear = document.getElementById("btn-product-data-clear");
+    if (btnClear) {
+      btnClear.addEventListener("click", () => {
+        state.productSummary = "";
+        if (taPd) taPd.value = "";
+        const st = document.getElementById("product-data-status");
+        if (st) { st.className = "voc-status"; st.textContent = "已清空粘贴内容（规划框需重新点「应用到规划框」才会改）"; }
+        saveState();
+      });
+    }
+    const btnClose = document.getElementById("btn-product-data-close");
+    if (btnClose && panelPd) {
+      btnClose.addEventListener("click", () => panelPd.setAttribute("hidden", ""));
+    }
+    if (taPd) {
+      taPd.addEventListener("change", () => {
+        state.productSummary = taPd.value;
+        saveStateDebounced();
+      });
+    }
+    syncProductDataPanel();
+    if (state.productSummary && panelPd) {
+      panelPd.removeAttribute("hidden");
+    }
 
     const btnUpload = document.getElementById("btn-upload-own");
     const fileUpload = document.getElementById("upload-files");
@@ -1740,6 +2244,11 @@
         if (action === "delete-gen-result") {
           e.stopPropagation();
           deleteBoxResult(boxId, btn.dataset.rid);
+          return;
+        }
+        if (action === "send-seven-theme-chat") {
+          const idx = t.getAttribute("data-seven-idx");
+          sendSevenThemeChat(idx);
           return;
         }
         if (action === "send-prompt-chat") {

@@ -403,18 +403,42 @@ body {
 
 /* Planning */
 .plan-tracks {
-  display: grid;
-  grid-template-columns: 1fr 1.4fr;
-  gap: 16px;
-}
-@media (max-width: 960px) {
-  .plan-tracks { grid-template-columns: 1fr; }
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 .track {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 14px;
   background: #fff;
+  min-width: 0;
+}
+/* 规划框横向排列；一屏放不下出现水平滚动条（不再竖向长列表） */
+#boxes-qiushuang,
+#boxes-anran,
+.track-boxes {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 2px 10px;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+#boxes-qiushuang::-webkit-scrollbar,
+#boxes-anran::-webkit-scrollbar,
+.track-boxes::-webkit-scrollbar {
+  height: 8px;
+}
+#boxes-qiushuang::-webkit-scrollbar-thumb,
+#boxes-anran::-webkit-scrollbar-thumb,
+.track-boxes::-webkit-scrollbar-thumb {
+  background: #c9b99a;
+  border-radius: 999px;
 }
 .track-head {
   display: flex;
@@ -443,9 +467,16 @@ body {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 12px;
-  margin-bottom: 10px;
+  margin-bottom: 0;
   background: #faf8f3;
   transition: border-color .15s;
+  flex: 0 0 min(380px, 86vw);
+  width: min(380px, 86vw);
+  max-width: 420px;
+  box-sizing: border-box;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
 }
 .img-box:hover { border-color: #c9b99a; }
 .img-box.picked-for-preview {
@@ -1351,18 +1382,6 @@ img[data-lightbox-src] {
 .picker-thumb-wrap {
   position: relative;
 }
-.mini-zoom-btn {
-  position: absolute;
-  bottom: 4px;
-  right: 4px;
-  border: none;
-  border-radius: 4px;
-  background: rgba(44, 36, 24, 0.72);
-  color: #fff;
-  font-size: 10px;
-  padding: 2px 5px;
-  cursor: zoom-in;
-}
 
 .wb-result-card {
   width: 154px;
@@ -1696,3 +1715,155 @@ img[data-lightbox-src] {
   font-size: 10.5px;
   white-space: nowrap;
 }
+
+
+
+/* VOC → 七图规划（横向图1→图7 + 滚动） */
+.seven-plan {
+  background: var(--panel, #fff);
+  border: 1px solid var(--line, #e5e7eb);
+  border-radius: 12px;
+  padding: 14px 14px 12px;
+  margin-bottom: 12px;
+}
+.seven-plan-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 6px;
+}
+.seven-plan-head h3 { margin: 0; font-size: 15px; }
+.seven-plan-sub {
+  font-size: 12px;
+  color: var(--muted, #6b7280);
+  margin: 0 0 10px;
+}
+.seven-hscroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--line, #e8eaed);
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 10px;
+  scrollbar-width: thin;
+}
+.seven-track {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 12px;
+  width: max-content;
+  min-height: 420px;
+}
+.seven-card {
+  flex: 0 0 280px;
+  width: 280px;
+  background: #fff;
+  border: 1px solid var(--line, #e5e7eb);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04);
+}
+.seven-card.is-main {
+  border-color: #93c5fd;
+  background: #fafcff;
+}
+.seven-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  padding: 10px 10px 6px;
+  border-bottom: 1px solid var(--line, #eef2f7);
+}
+.seven-idx { font-weight: 700; font-size: 14px; }
+.seven-slot { font-size: 12px; color: var(--ink-soft, #4b5563); }
+.seven-owner {
+  margin-left: auto;
+  font-size: 11px;
+  color: #0369a1;
+  background: #e0f2fe;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.seven-card-body {
+  padding: 8px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+.seven-label {
+  display: block;
+  font-size: 11px;
+  color: var(--muted, #6b7280);
+  margin-bottom: 4px;
+}
+.seven-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #dbe1ea;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12px;
+  background: #fff;
+  resize: vertical;
+}
+.seven-input.seven-en {
+  margin-top: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.seven-hint { font-size: 11px; color: #b45309; margin-top: 4px; }
+.seven-theme-chat {
+  margin-top: 4px;
+  border-top: 1px dashed #e5e7eb;
+  padding-top: 8px;
+}
+.seven-theme-chat-head {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.seven-theme-chat-log {
+  max-height: 120px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.seven-chat-bubble {
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #f3f4f6;
+}
+.seven-chat-bubble.is-user { background: #e0f2fe; }
+.seven-chat-bubble.is-bot { background: #f5f3ff; }
+.seven-theme-chat-empty {
+  font-size: 11px;
+  color: var(--muted, #6b7280);
+  margin-bottom: 6px;
+}
+.seven-theme-chat-input-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.seven-theme-chat-input { flex: 1; }
+.seven-plan-empty {
+  padding: 12px;
+  border: 1px dashed var(--line, #d1d5db);
+  border-radius: 10px;
+  color: var(--muted, #6b7280);
+  font-size: 13px;
+}
+.seven-plan-empty-wrap { margin-bottom: 12px; }
+
+/* legacy table selectors kept harmless if unused */
+.seven-table-wrap { display: none; }

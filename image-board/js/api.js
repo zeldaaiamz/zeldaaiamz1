@@ -116,4 +116,61 @@ window.BoardAPI = {
       a.remove();
     }
   },
+
+  async postBlob(path, body, opts) {
+    const timeoutMs = (opts && opts.timeoutMs) || 120000;
+    const ctrl = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      ctrl.abort("timeout");
+    }, timeoutMs);
+    try {
+      const r = await fetch(this.base + path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body || {}),
+        signal: ctrl.signal,
+        mode: "cors",
+      });
+      const ctype = (r.headers.get("Content-Type") || "").toLowerCase();
+      if (!r.ok || ctype.includes("application/json")) {
+        let data = {};
+        try {
+          data = JSON.parse(await r.text());
+        } catch (_) {}
+        const err = new Error((data && data.error) || r.statusText || `HTTP ${r.status}`);
+        err.data = data;
+        err.status = r.status;
+        throw err;
+      }
+      const blob = await r.blob();
+      const zipCount = r.headers.get("X-Zip-Count");
+      return {
+        blob,
+        zipCount: zipCount ? Number(zipCount) : null,
+        contentDisposition: r.headers.get("Content-Disposition") || "",
+      };
+    } catch (e) {
+      if (timedOut || (e && (e.name === "AbortError" || e.isTimeout))) {
+        const err = new Error("请求超时");
+        err.isTimeout = true;
+        throw err;
+      }
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
+  },
+  downloadBlob(blob, suggestedName) {
+    if (!blob) return;
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objUrl;
+    a.download = suggestedName || "preview.zip";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(objUrl), 8000);
+  },
 };

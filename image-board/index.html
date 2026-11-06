@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AI 做图看板</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23c45c26'/%3E%3Ctext x='32' y='43' font-size='30' text-anchor='middle' fill='%23fff' font-family='sans-serif'%3E图%3C/text%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="css/board.css?v=imgboard-6" />
+  <link rel="stylesheet" href="css/board.css?v=imgboard-11" />
 </head>
 <body>
   <div class="demo-banner" id="top-banner">
@@ -36,15 +36,13 @@
         <div class="layer-num">1</div>
         <h2>产品档案与白底真修入库</h2>
         <span class="tag tag-demo" data-mode-tag>演示数据</span>
-        <div class="hint">VOC 导入档案 → 上传原图默认全选批量白底真修（豆包）→ 单选/多选白底图挂入规划框</div>
+        <div class="hint">VOC 导入档案 → 上传原图默认全选批量白底真修（豆包）→ 点图片放大 · 点左上角名称勾选 → 挂入规划框</div>
       </div>
 
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
         <span style="font-size:13px;color:var(--ink-soft);">档案来源</span>
         <div class="source-toggle" id="source-toggle" role="tablist">
           <button type="button" class="active" data-source="amazon" role="tab">亚马逊 VOC</button>
-          <button type="button" data-source="etsy" role="tab">Etsy 评论分析</button>
-          <button type="button" data-source="demo" role="tab">演示数据</button>
         </div>
         <span id="source-label" style="font-size:12px;color:var(--muted);"></span>
       </div>
@@ -54,7 +52,21 @@
         <input id="voc-query" type="text" placeholder="例：B0GVDS8X33 或 task UUID" list="voc-fixtures" />
         <datalist id="voc-fixtures"></datalist>
         <button class="btn btn-primary btn-sm" id="btn-voc-import" type="button">从 VOC 导入</button>
+        <button class="btn btn-sm" id="btn-product-data" type="button" title="粘贴产品总结，供下游出图 AI 分析并生成提示词">导入产品数据</button>
         <span id="voc-import-status" class="voc-status"></span>
+      </div>
+      <div class="product-data-panel" id="product-data-panel" hidden>
+        <div class="product-data-head">
+          <strong>导入产品数据</strong>
+          <span class="hint">粘贴产品总结 / 消费者在意点；写入规划框 brief/prompt，供下游出图 AI 分析。可与 VOC 并存（粘贴点优先，VOC 补充）。</span>
+        </div>
+        <textarea id="product-data-text" rows="6" placeholder="例：&#10;消费者在意点：&#10;- 辅助艺术治疗&#10;- 方便放在书桌、方便拿取&#10;- 放松心情（瑜伽 / 冥想 / 焦虑时使用）&#10;痛点：印刷质量差；尺寸比预期小"></textarea>
+        <div class="product-data-actions">
+          <button class="btn btn-primary btn-sm" id="btn-product-data-apply" type="button">应用到规划框</button>
+          <button class="btn btn-ghost btn-sm" id="btn-product-data-clear" type="button">清空</button>
+          <button class="btn btn-ghost btn-sm" id="btn-product-data-close" type="button">收起</button>
+          <span id="product-data-status" class="voc-status"></span>
+        </div>
       </div>
       <div id="provider-status" class="provider-status"></div>
 
@@ -135,7 +147,7 @@
         <div class="layer-num">2</div>
         <h2>图片规划与受控图生图</h2>
         <span class="tag tag-demo" data-mode-tag>演示数据</span>
-        <div class="hint">可与秋霜/安然对话改提示词（不自动生图）· 支持 v3/v6 多图参考 · 缩略图点击页内放大</div>
+        <div class="hint">可与秋霜/安然对话改提示词（不自动生图）· 规划框横向排列，一屏放不下可左右滑动 · 点图片放大 · 点左上角名称勾选</div>
       </div>
 
       <div id="whitebg-lock-banner" class="whitebg-lock-banner"></div>
@@ -147,7 +159,7 @@
             <span class="who" id="qs-track-who">主图 · 细节图 · 尺寸图</span>
             <span class="role">主图5条硬性规范 / 细节焦点 / 对比物</span>
           </div>
-          <div id="boxes-qiushuang"></div>
+          <div id="boxes-qiushuang" class="track-boxes"></div>
         </div>
         <div class="track" id="track-anran">
           <div class="track-head">
@@ -155,7 +167,7 @@
             <span class="who" id="ar-track-who">场景图策划</span>
             <span class="role">视觉语言呈现档案要点</span>
           </div>
-          <div id="boxes-anran"></div>
+          <div id="boxes-anran" class="track-boxes"></div>
         </div>
       </div>
     </section>
@@ -167,7 +179,7 @@
         <div class="layer-num">3</div>
         <h2>预览框 · 亚马逊 7 图定稿（最终版本）</h2>
         <span class="tag tag-demo" data-mode-tag>演示数据</span>
-        <div class="hint">加入预览即写入「{产品名}/最终版本/」· 支持拖拽调序 · 页内放大 · 单张/全部下载</div>
+        <div class="hint">加入预览即写入「{产品名}/最终版本/」· 支持拖拽调序 · 点图片放大 · 单张/全部下载</div>
       </div>
 
       <div class="preview-toolbar">
@@ -226,10 +238,10 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="js/api-config.js?v=imgboard-6"></script>
-  <script src="js/api.js?v=imgboard-6"></script>
-  <script src="js/demo-data.js?v=imgboard-6"></script>
-  <script src="js/whitebg.js?v=imgboard-6"></script>
-  <script src="js/app.js?v=imgboard-6"></script>
+  <script src="js/api-config.js?v=imgboard-11"></script>
+  <script src="js/api.js?v=imgboard-11"></script>
+  <script src="js/demo-data.js?v=imgboard-11"></script>
+  <script src="js/whitebg.js?v=imgboard-11"></script>
+  <script src="js/app.js?v=imgboard-11"></script>
 </body>
 </html>
