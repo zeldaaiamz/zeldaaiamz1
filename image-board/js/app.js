@@ -1,10 +1,11 @@
-/* AI 做图看板 v5 (imgboard-17) — 新产品彻底隔离 + 秋霜/安然自动协同规划七图 + 自动留稿 */
+/* AI 做图看板 P0/P1 (imgboard-18) — 新产品彻底隔离 + 秋霜/安然自动协同规划七图 + 自动留稿 */
 (function () {
   const STORAGE_KEY = "ai-image-board-v3";
   const LEGACY_KEY = "ai-image-board-v2";
   const GEN_PROVIDERS = ["doubao", "banana", "grok", "chatgpt"];
   const MODEL_MAP = Object.fromEntries(DEMO.models.map((m) => [m.id, m]));
   const API = window.BoardAPI;
+  const Workflow = window.BoardWorkflow;
 
   const MAIN_FORBIDDEN_CLIENT_RE = /(明确标注|标注\s*\d+|卖点文字|卖点文案|说明性?文字|添加.*文字|elegantly\s+crafted|add\s+callout)/i;
 
@@ -222,7 +223,7 @@
     delete s.whitebgGenerated;
     delete s.whitebgPicks;
     delete s.whitebgSaved;
-    return s;
+    return Workflow.migrate(s);
   }
 
   function loadState() {
@@ -380,6 +381,9 @@
         promptChat: [],
         promptOverride: null,
         briefOverride: null,
+        needs: [], matchStatus: "unassessed",
+        matchDetails: {matched: [], missingNeedIds: [], reasons: []},
+        reshootList: [], chatgptPack: null,
       };
     } else {
       if (!Array.isArray(state.boxes[boxId].results)) state.boxes[boxId].results = [];
@@ -414,18 +418,9 @@
     return currentPlans().find((b) => b.id === boxId);
   }
 
-  function ensureProductSummaryInText(text, isMain) {
-    const summary = (state.productSummary || "").trim();
-    if (!summary) return text || "";
-    const marker = "【产品总结·人工导入】";
-    let body = (text || "").trim();
-    if (body.includes(marker)) {
-      body = body.split(marker)[0].trim();
-    }
-    const block = isMain
-      ? `${marker}\n以下消费者在意点只能靠产品本体构图传达（主图零叠字，禁止写成画面文字）：\n${summary}`
-      : `${marker}\n下游出图 AI 必须分析并呼应以下人工产品总结（卖点/在意点）：\n${summary}`;
-    return body ? `${body}\n\n${block}` : block;
+  // Raw product introduction is provenance, never executable image prompt text.
+  function ensureProductSummaryInText(text) {
+    return String(text || "").split("【产品总结·人工导入】")[0].trim();
   }
 
   function getEffectiveBrief(plan, box) {
@@ -576,6 +571,7 @@
       `落盘：${mac}/${displayProductFolder()}/{过程图 | 白底图 | 最终版本 | 报告}（2000×2000 .png/.jpg）` +
       (state.lastSavePath ? ` · 最近：${state.lastSavePath}` : "") +
       syncSummary;
+    if (serverStatus && serverStatus.isolatedPreview) document.getElementById("save-path").textContent = "仅写本地预览副本 generated/ · 不同步桌面，不连接生产/其他worker · 2000×2000 原图保留";
 
     const emptyNew = isBlankNewProduct();
     document.getElementById("product-sub").textContent = emptyNew
@@ -976,6 +972,7 @@
     syncPlanBoxesFromSeven();
     saveStateDebounced();
     if (typeof renderPlans === "function") renderPlans();
+    renderWorkflow();
   }
 
   async function sendSevenThemeChat(idx) {
@@ -1069,7 +1066,27 @@
     }
   }
 
+  function renderWorkflow() {
+    Workflow.migrate(state);
+    const host = document.getElementById("workflow-panels");
+    if (!host) return;
+    host.innerHTML = Workflow.render(state);
+    if (!host._wfBound) {
+      host.addEventListener("change", (ev) => {
+        const slot = ev.target.dataset.wfStage;
+        if (!slot) return;
+        Workflow.setStage(state, slot, ev.target.value);
+        saveState(); renderWorkflow();
+      });
+      host._wfBound = true;
+    }
+    const issues = Workflow.checks(state).filter(x => x.status !== "pass");
+    const progress = document.getElementById("workflow-progress");
+    if (progress) progress.innerHTML = `<strong>${escapeHtml(state.productName || state.asin || "新产品")}</strong><div class="wf-steps"><a href="#whitebg-section">图库</a><a href="#workflow-b">关心点</a><a class="is-current" href="#workflow-c">规划 <small>⚠ ${issues.length}</small></a><span>草图 · 后续</span><span>终稿 · 后续</span><a href="#layer-preview">定稿</a></div><span class="wf-local">P0+P1 工作流 · v18</span>`;
+  }
+
   function renderArchive() {
+    renderWorkflow();
     const data = activeArchive();
     const blankNew = isBlankNewProduct();
     const isRealCard = isRealMode() && state.source === "amazon" && !!state.archiveOverride;
@@ -2186,6 +2203,7 @@
         state.taskId = null;
 
         if (wasDemo || isSwitchingProduct) {
+          state.workflowSnapshot = null;
           state.boxes = {};
           state.preview = [null, null, null, null, null, null, null];
           state.whitebgSources = [];
@@ -2208,6 +2226,7 @@
         productName: candidateName,
       };
       if (hasSameRealVoc && state.archiveOverride) {
+        body.workflowSnapshot = Workflow.snapshot(state);
         body.archive = state.archiveOverride;
       }
 
@@ -2238,6 +2257,7 @@
           state.productName
         )
       );
+      Workflow.merge(state, res);
       if (res.saved) state.lastSavePath = res.saved.category + "/" + res.saved.filename;
       Object.keys(state.boxes || {}).forEach((bid) => {
         const b = state.boxes[bid];
@@ -2259,14 +2279,14 @@
       const painN = (parsed.pain || []).length;
       if (st) {
         st.className = "voc-status ok";
-        st.textContent = `✓ 已按「${state.productName}」生成 ${n} 框初稿（在意点 ${itchN} · 痛点 ${painN}）· 秋霜+安然正在协同精修七图主题…`;
+        st.textContent = state.sevenPlanSource === "authored" ? "✓ 已留存未核实资料来源 · 保留现有金样，不自动重排/改稿" : `✓ 已按「${state.productName}」生成 ${n} 框初稿（在意点 ${itchN} · 痛点 ${painN}）· 秋霜+安然正在协同精修七图主题…`;
       }
       if (!silent) {
-        toast(`已载入「${state.productName}」产品数据 · 秋霜（图1–3）与安然（图4–7）开始协同规划七图`);
+        toast(state.sevenPlanSource === "authored" ? "资料已作为未核实来源留存；原金样保持不变" : `已载入「${state.productName}」产品数据 · 秋霜（图1–3）与安然（图4–7）开始协同规划七图`);
       }
 
-      // Immediately dispatch 秋霜+安然 collaborative LLM pass for this new product!
-      runCollaborativeSevenPlan({ auto: true });
+      // Source-only additions never silently rewrite an existing authored gold plan.
+      if (state.sevenPlanSource !== "authored") runCollaborativeSevenPlan({ auto: true });
     } catch (e) {
       const msg = humanizeError(e, "voc");
       if (st) { st.className = "voc-status err"; st.textContent = "失败：" + msg; }
@@ -2321,8 +2341,8 @@
       state.sevenPlanStatus = res.sevenPlanStatus || (res.archive && res.archive.sevenPlanStatus) || "draft_pending";
       state.sevenPlanStatusLabel = res.sevenPlanStatusLabel || (res.archive && res.archive.sevenPlanStatusLabel) || "待秋霜+安然规划";
       state.sevenPlanStatusHint = res.sevenPlanStatusHint || null;
-      // Always reset per-card theme chat when importing VOC so prior product dialogue never leaks
-      state.sevenThemeChat = {};
+      // Only a different product resets author chat; same-ASIN reimport is non-destructive.
+      if (isDifferentAsin) state.sevenThemeChat = {};
       state.sevenThemeBusy = {};
 
       // Never carry over a previous product's pasted summary into a different ASIN!
@@ -2374,8 +2394,11 @@
       }
 
       state.planOwnerSig = buildOwnerSig(state.asin, state.productName, state.productSummary);
-      state.boxes = {};
-      state.preview = [null, null, null, null, null, null, null];
+      if (isDifferentAsin) {
+        state.boxes = {};
+        state.preview = [null, null, null, null, null, null, null];
+      }
+      Workflow.merge(state, res);
       if (isDifferentAsin) {
         state.whitebgSources = [];
         state.whitebgSelectedSourceIds = [];

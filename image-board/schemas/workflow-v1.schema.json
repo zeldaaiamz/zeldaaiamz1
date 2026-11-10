@@ -1,0 +1,579 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:image-board:workflow:1",
+  "title": "Image board workflow snapshot v1",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "asin",
+    "taskId",
+    "evidenceRegistry",
+    "concerns",
+    "productFacts",
+    "needFactLinks",
+    "planRows",
+    "journeyMapping"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "asin": {
+      "type": "string"
+    },
+    "taskId": {
+      "type": "string"
+    },
+    "evidenceRegistry": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/Evidence"
+      }
+    },
+    "concerns": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Concern"
+      }
+    },
+    "productFacts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Fact"
+      }
+    },
+    "needFactLinks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Link"
+      }
+    },
+    "planRows": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Row"
+      }
+    },
+    "journeyMapping": {
+      "type": "object",
+      "required": [
+        "status",
+        "revision",
+        "bySlot"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "pending",
+            "draft",
+            "confirmed"
+          ]
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "bySlot": {
+          "type": "object",
+          "additionalProperties": {
+            "enum": [
+              "unassessed",
+              "awareness",
+              "interest",
+              "question",
+              "desire"
+            ]
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "sourceSummary": {
+      "type": "object"
+    },
+    "boxState": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/Box"
+      }
+    },
+    "sevenImagePlan": {
+      "type": "array"
+    },
+    "preview": {
+      "type": "array"
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "Evidence": {
+      "type": "object",
+      "required": [
+        "id",
+        "sourceType",
+        "taskId",
+        "reviewId",
+        "sourceAsin",
+        "originalQuote",
+        "rawPointer",
+        "rawSha256",
+        "scope",
+        "verification"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "sourceType": {
+          "type": "string"
+        },
+        "taskId": {
+          "type": "string"
+        },
+        "reviewId": {
+          "type": "string"
+        },
+        "sourceRecordId": {
+          "type": "string"
+        },
+        "sourceAsin": {
+          "type": "string"
+        },
+        "sourceUrl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "originalQuote": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rawPointer": {
+          "type": "string"
+        },
+        "rawSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "scope": {
+          "type": "object"
+        },
+        "verification": {
+          "type": "object",
+          "required": [
+            "status",
+            "method"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "verified"
+              ]
+            },
+            "method": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "Concern": {
+      "type": "object",
+      "required": [
+        "id",
+        "code",
+        "shortZh",
+        "questionZh",
+        "evidenceIds",
+        "frequency",
+        "evidenceStatus",
+        "eligibleForPlanning"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^V[0-9]{2,}$"
+        },
+        "shortZh": {
+          "type": "string",
+          "maxLength": 8
+        },
+        "questionZh": {
+          "type": "string"
+        },
+        "priorityRank": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "evidenceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "frequency": {
+          "type": "object",
+          "required": [
+            "count",
+            "denominator",
+            "unit"
+          ],
+          "properties": {
+            "count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "denominator": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unit": {
+              "const": "unique_reviews"
+            }
+          },
+          "additionalProperties": true
+        },
+        "evidenceStatus": {
+          "enum": [
+            "verified",
+            "missing",
+            "stale"
+          ]
+        },
+        "eligibleForPlanning": {
+          "type": "boolean"
+        },
+        "coveredBySlotIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "archived": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "Fact": {
+      "type": "object",
+      "required": [
+        "id",
+        "code",
+        "revision",
+        "asin",
+        "productRevision",
+        "property",
+        "value",
+        "sourceRefs",
+        "verification",
+        "allowedClaims"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^F[0-9]{2,}$"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "asin": {
+          "type": "string"
+        },
+        "productRevision": {
+          "type": "string"
+        },
+        "shortZh": {
+          "type": "string",
+          "maxLength": 8
+        },
+        "property": {
+          "type": "string"
+        },
+        "value": {},
+        "unit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sourceRefs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "kind",
+              "pointer"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "product_archive",
+                  "product_import",
+                  "spec",
+                  "measurement",
+                  "test",
+                  "photo",
+                  "print_master",
+                  "whitebg_tag"
+                ]
+              },
+              "pointer": {
+                "type": "string"
+              },
+              "sha256": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "verification": {
+          "type": "object",
+          "required": [
+            "status"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "unverified",
+                "verified",
+                "rejected",
+                "conflict"
+              ]
+            },
+            "verifiedBy": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "evidenceRefs": {
+              "type": "array"
+            }
+          },
+          "additionalProperties": true
+        },
+        "allowedClaims": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "prohibitedExtensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "Answer": {
+      "type": "object",
+      "required": [
+        "textZh",
+        "questionKey",
+        "concernIds",
+        "evidenceIds",
+        "basis"
+      ],
+      "properties": {
+        "textZh": {
+          "type": "string"
+        },
+        "questionKey": {
+          "type": "string"
+        },
+        "concernIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidenceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "basis": {
+          "enum": [
+            "voc",
+            "product_identity"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "Row": {
+      "type": "object",
+      "required": [
+        "slotId",
+        "imageIndex",
+        "journeyStage",
+        "imageType",
+        "answersQuestion"
+      ],
+      "properties": {
+        "slotId": {
+          "type": "string"
+        },
+        "imageIndex": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 7
+        },
+        "journeyStage": {
+          "enum": [
+            "unassessed",
+            "awareness",
+            "interest",
+            "question",
+            "desire"
+          ]
+        },
+        "imageType": {
+          "enum": [
+            "main",
+            "detail",
+            "size",
+            "scene",
+            "comparison",
+            "infographic"
+          ]
+        },
+        "answersQuestion": {
+          "$ref": "#/$defs/Answer"
+        },
+        "needFactLinkIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "Link": {
+      "type": "object",
+      "required": [
+        "id",
+        "concernId",
+        "factIds",
+        "slotId",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "concernId": {
+          "type": "string"
+        },
+        "factIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "slotId": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "unverified",
+            "verified_satisfied",
+            "not_satisfied",
+            "stale"
+          ]
+        },
+        "requirement": {
+          "type": "object",
+          "required": [],
+          "properties": {
+            "property": {
+              "type": "string"
+            },
+            "op": {
+              "enum": [
+                "eq",
+                "gte",
+                "lte",
+                "includes"
+              ]
+            },
+            "expected": {},
+            "unit": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        },
+        "allowedValueStatement": {
+          "type": "string"
+        },
+        "prohibitedPromises": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "Box": {
+      "type": "object",
+      "required": [
+        "needs",
+        "matchStatus",
+        "matchDetails",
+        "reshootList",
+        "chatgptPack"
+      ],
+      "properties": {
+        "needs": {
+          "type": "array"
+        },
+        "matchStatus": {
+          "enum": [
+            "unassessed",
+            "matched",
+            "partial",
+            "missing",
+            "stale"
+          ]
+        },
+        "matchDetails": {
+          "type": "object"
+        },
+        "reshootList": {
+          "type": "array"
+        },
+        "chatgptPack": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

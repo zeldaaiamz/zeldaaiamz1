@@ -106,6 +106,7 @@ window.BoardWorkspace = (function () {
       sevenPlanStatusLabel: state.sevenPlanStatusLabel,
       sevenPlanAuthor: state.sevenPlanAuthor,
       sevenImagePlan: state.sevenImagePlan || [],
+      workflowSnapshot: window.BoardWorkflow ? window.BoardWorkflow.snapshot(state) : (state.workflowSnapshot || null),
       archive: {
         itch: archive.itch || [],
         pain: archive.pain || [],
@@ -165,6 +166,7 @@ window.BoardWorkspace = (function () {
       productDir: "",
       taskId: null,
       archiveOverride: null,
+      workflowSnapshot: null,
       productSummary: "",
       whitebgSources: [],
       whitebgSelectedSourceIds: [],
