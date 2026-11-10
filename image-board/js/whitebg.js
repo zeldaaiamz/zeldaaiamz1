@@ -29,6 +29,9 @@ window.BoardWhitebg = {
 
     let boardPickerOpen = false;
     let previewSyncing = false;
+    let downloadBusy = false;
+    let downloadUseFallback = false;
+    let downloadController = null;
     const runtime = {
       busy: false,
       text: "",
@@ -144,7 +147,7 @@ window.BoardWhitebg = {
             const full = API.fileUrl(c.imageUrl);
             return `<div class="picker-item" data-pick-board-idx="${i}" title="${escapeHtml(c.label)} · 点图放大 · 点名称加入待修">
               <div class="picker-thumb-wrap">
-                <img src="${escapeHtml(full)}" alt="${escapeHtml(c.label)}" data-lightbox-src="${escapeHtml(full)}" data-lightbox-title="${escapeHtml(c.label)}" />
+                <img src="${escapeHtml(API.thumbnailUrl(full))}" decoding="async" loading="eager" alt="${escapeHtml(c.label)}" data-lightbox-src="${escapeHtml(full)}" data-lightbox-title="${escapeHtml(c.label)}" />
               </div>
               <div class="p-meta">${escapeHtml(c.label)}</div>
             </div>`;
@@ -202,7 +205,7 @@ window.BoardWhitebg = {
           return `<div class="src-card ${sel ? "selected" : ""}" data-src-id="${escapeHtml(u.id)}" title="${escapeHtml(u.label)}">
             <button type="button" class="src-check" data-toggle-src="${escapeHtml(u.id)}" title="勾选/取消待修">${sel ? "✓ 待修" : `原图${idx + 1}`}</button>
             <button type="button" class="src-remove" data-remove-src="${escapeHtml(u.id)}" title="移除此原图">×</button>
-            <img src="${escapeHtml(fullUrl)}" alt="${escapeHtml(u.label)}" data-lightbox-src="${escapeHtml(fullUrl)}" data-lightbox-title="待修原图 · ${escapeHtml(u.label)}" />
+            <img src="${escapeHtml(API.thumbnailUrl(fullUrl))}" decoding="async" loading="eager" alt="${escapeHtml(u.label)}" data-lightbox-src="${escapeHtml(fullUrl)}" data-lightbox-title="待修原图 · ${escapeHtml(u.label)}" />
             <div class="src-meta" data-toggle-src="${escapeHtml(u.id)}">${escapeHtml(u.label)}</div>
           </div>`;
         })
@@ -249,7 +252,7 @@ window.BoardWhitebg = {
         el.className = "whitebg-lock-banner locked";
         el.innerHTML = `
           <div class="lock-lhs">
-            <img src="${escapeHtml(fullRefUrl)}" alt="${escapeHtml(ref.label)}" data-lightbox-src="${escapeHtml(fullRefUrl)}" data-lightbox-title="当前锁定白底基准图 · ${escapeHtml(ref.label)}" />
+            <img src="${escapeHtml(API.thumbnailUrl(fullRefUrl))}" decoding="async" loading="eager" alt="${escapeHtml(ref.label)}" data-lightbox-src="${escapeHtml(fullRefUrl)}" data-lightbox-title="当前锁定白底基准图 · ${escapeHtml(ref.label)}" />
             <div>
               <strong>产品本体强约束已生效</strong> · 当前主基准：${escapeHtml(ref.label)} ${escapeHtml(multiTip)}
               <div style="font-size:11.5px;opacity:.9;">所有主图 / 细节 / 尺寸 / 场景 / 精改均强制传白底参考图进行 i2i 生图，严禁空想外形或魔改结构/颜色/比例/材质。</div>
@@ -266,6 +269,201 @@ window.BoardWhitebg = {
       }
     }
 
+
+    function canSaveToDirectory() {
+      return !downloadUseFallback && typeof window.showDirectoryPicker === "function" &&
+        typeof window.crypto?.randomUUID === "function" && typeof window.navigator?.locks?.request === "function";
+    }
+
+    function downloadTools(count) {
+      const canPick = canSaveToDirectory();
+      const hint = canPick
+        ? "选择保存位置 · 下载 2000×2000 原图（不是缩略图）"
+        : "在浏览器设置里打开‘下载前询问保存位置’即可自选路径";
+      return `<button type="button" class="btn btn-primary btn-sm" id="btn-download-wb-selected"
+        aria-describedby="wb-download-hint" aria-busy="${downloadBusy}" ${!count || downloadBusy ? "disabled" : ""}>下载已勾选（${count}）</button>
+        ${downloadBusy ? '<button type="button" class="btn btn-ghost btn-sm" id="btn-cancel-wb-download">取消下载</button>' : ''}
+        <span class="wb-download-hint" id="wb-download-hint">${hint}</span>`;
+    }
+
+    function downloadItems(refs) {
+      // Preserve the version/extension within the existing ZIP API's 140-character entry limit,
+      // and keep even 4-byte Unicode product names within common 255-byte filesystem limits.
+      const clean = (text) => String(text || "").replace(/[<>:"/\\|?*\u0000-\u001f\u007f]/g, "_").replace(/[. ]+$/g, "").trim();
+      const product = Array.from(clean(state.productName || state.productDir || getAsin() || "产品")).slice(0, 48).join("") || "产品";
+      const used = new Set();
+      return refs.map((ref, index) => {
+        const original = new URL(API.fileUrl(ref.imageUrl), window.location.href);
+        original.searchParams.delete("thumb");
+        original.searchParams.delete("v");
+        const ext = (original.pathname.match(/\.(png|jpe?g)$/i) || [])[1] || "png";
+        const version = Number.isSafeInteger(Number(ref.version)) && Number(ref.version) > 0 ? Number(ref.version) : index + 1;
+        const stem = `${product}_豆包_v${version}`;
+        let filename = `${stem}.${ext.toLowerCase()}`, n = 2;
+        while (used.has(filename.toLowerCase())) filename = `${stem}_${n++}.${ext.toLowerCase()}`;
+        used.add(filename.toLowerCase());
+        return { imageUrl: API.downloadUrl(original.href, filename), filename };
+      });
+    }
+
+    async function writeOriginal(handle, blob, signal) {
+      const stream = await handle.createWritable();
+      // Own the writer explicitly so abort remains valid during an in-flight write/close.
+      const ownsWriter = typeof stream.getWriter === "function";
+      const writable = ownsWriter ? stream.getWriter() : stream;
+      const cancelError = Object.assign(new Error("已取消"), { isCancelled: true });
+      let rejectCancel, stopping;
+      const cancelled = new Promise((_, reject) => { rejectCancel = reject; });
+      // Cancellation can arrive while createWritable resolves, before any race is installed.
+      cancelled.catch(() => {});
+      const stop = () => {
+        if (!stopping) {
+          try { stopping = Promise.resolve(writable.abort()); }
+          catch (error) { stopping = Promise.reject(error); }
+        }
+        return stopping;
+      };
+      const onAbort = () => {
+        // Abort the actual disk writer, not only the fetch/controller flag.
+        stop().catch(() => {});
+        rejectCancel(cancelError);
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+      try {
+        if (signal.aborted) { onAbort(); throw cancelError; }
+        await Promise.race([writable.write(blob), cancelled]);
+        if (signal.aborted) throw cancelError;
+        await Promise.race([writable.close(), cancelled]);
+      } catch (error) {
+        const reason = signal.aborted ? cancelError : error;
+        // Do not unlink while the writer is still active: await its abort first.
+        try { await stop(); }
+        catch (abortError) {
+          reason.cleanupBlocked = true;
+          reason.cleanupError = `终止写入失败：${abortError.message}；未清理本批次文件（写入器未确认停止）`;
+        }
+        throw reason;
+      } finally {
+        signal.removeEventListener("abort", onAbort);
+        if (ownsWriter) { try { writable.releaseLock(); } catch (_) {} }
+      }
+    }
+
+    async function withNewBatchDirectory(parent, product, signal, run) {
+      const check = () => {
+        if (signal.aborted) throw Object.assign(new Error("已取消"), { isCancelled: true });
+      };
+      const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23"
+      }).formatToParts(new Date()).map(part => [part.type, part.value]));
+      const stamp = `${parts.year}${parts.month}${parts.day}-${parts.hour}${parts.minute}${parts.second}`;
+      for (let attempt = 0; attempt < 10; attempt++) {
+        check();
+        const nonce = window.crypto.randomUUID().replace(/-/g, "");
+        if (!/^[a-f0-9]{32}$/i.test(nonce)) throw new Error("无法创建安全随机批次目录");
+        const name = `${product}_白底图_${stamp}_${nonce}`;
+        // Web Locks serializes even a forced nonce collision across same-origin tabs.
+        // Hold ownership through writing AND cleanup, not merely through mkdir.
+        const result = await window.navigator.locks.request(`image-board-whitebg:${name}`, { ifAvailable: true }, async lock => {
+          if (!lock) return null;
+          check();
+          try {
+            await parent.getDirectoryHandle(name);
+            return null; // Existing directories, even empty ones, never belong to us.
+          } catch (error) {
+            if (error.name === "TypeMismatchError") return null;
+            if (error.name !== "NotFoundError") throw error;
+          }
+          check();
+          const batch = await parent.getDirectoryHandle(name, { create: true });
+          // Someone/another application may have populated the candidate. Do not touch it.
+          for await (const _ of batch.entries()) return null;
+          check();
+          await run(batch);
+          return name;
+        });
+        if (result) return result;
+      }
+      throw new Error("无法取得新的空批次目录，请重试下载");
+    }
+
+    async function downloadSelected() {
+      if (downloadBusy) return;
+      const refs = getSelectedRefs().filter(ref => ref.imageUrl);
+      if (!refs.length) return;
+      // Snapshot this product once. A later product switch cannot mutate this batch.
+      let items = [], written = 0, zipMode = false;
+      const productName = state.productName || state.productDir || getAsin() || "产品";
+      const controller = new AbortController();
+      downloadController = controller;
+      downloadBusy = true;
+      const checkCancelled = () => {
+        if (controller.signal.aborted) throw Object.assign(new Error("已取消下载"), { isCancelled: true });
+      };
+      try {
+        items = downloadItems(refs);
+        renderResults();
+        let directory = null;
+        try {
+          // Directory picker is called within the click's transient activation.
+          // Unlike showSaveFilePicker it creates no empty destination before fetch,
+          // and gives us a parent handle to safely clean up only our new files.
+          if (canSaveToDirectory()) {
+            directory = await window.showDirectoryPicker({ mode: "readwrite" });
+          }
+        } catch (error) {
+          if (error.name === "AbortError") {
+            toast("已取消保存白底图");
+            return;
+          }
+          if (error.name !== "SecurityError" && error.name !== "NotSupportedError") throw error;
+          downloadUseFallback = true;
+        }
+        checkCancelled();
+        if (directory) {
+          const prefix = items[0].filename.slice(0, items[0].filename.lastIndexOf("_豆包_v"));
+          const batchName = await withNewBatchDirectory(directory, prefix, controller.signal, async batch => {
+            for (const item of items) {
+              const blob = await API.getOriginalBlob(item.imageUrl, { timeoutMs: 120000, signal: controller.signal });
+              checkCancelled();
+              // Only this new, checked-empty, lock-owned batch is ever written/cleaned.
+              const handle = await batch.getFileHandle(item.filename, { create: true });
+              try {
+                checkCancelled();
+                await writeOriginal(handle, blob, controller.signal);
+              } catch (error) {
+                try { if (!error.cleanupBlocked) await batch.removeEntry(item.filename); }
+                catch (cleanupError) {
+                  error.cleanupError = `${error.cleanupError ? error.cleanupError + "；" : ""}未能清理本批次文件：${cleanupError.message}`;
+                }
+                throw error;
+              }
+              written++;
+            }
+          });
+          checkCancelled();
+          toast(`已保存 ${written} 张白底原图（2000×2000）至所选位置/${batchName}`);
+        } else {
+          zipMode = true;
+          const prefix = items[0].filename.slice(0, items[0].filename.lastIndexOf("_豆包_v"));
+          const result = await API.downloadZipBatches(items, {
+            zipName: `${prefix}_白底图_${items.length}张.zip`, body: { productName }, signal: controller.signal,
+            onProgress: progress => { written = progress.count; }
+          });
+          toast(`已发起 ${result.count} 张白底原图、${result.packages} 个 ZIP 下载 · 请允许连续下载，并在浏览器设置里打开‘下载前询问保存位置’`, { duration: 6500 });
+        }
+      } catch (error) {
+        const progress = `${zipMode ? "已发起下载" : "已保存"} ${written}/${items.length} 张`;
+        if (error.isCancelled) toast(`已取消，${progress}${error.cleanupError ? `；${error.cleanupError}` : ""}`);
+        else toast(`白底原图保存失败：${error.message || error}${error.cleanupError ? `；${error.cleanupError}` : ""}（${progress}）`, { duration: 6500 });
+      } finally {
+        downloadBusy = false;
+        downloadController = null;
+        renderResults();
+      }
+    }
+
     function renderResults() {
       ensureSelectionArrays();
       renderRuntime();
@@ -279,7 +477,7 @@ window.BoardWhitebg = {
 
       if (!items.length) {
         root.innerHTML = `<div class="model-col wb-single-col empty">
-          <h4><span>豆包 · 白底真修结果</span><span class="tag">待生成</span></h4>
+          <div class="wb-col-head"><strong>豆包 · 白底真修图库</strong><span class="tag">待生成</span><div class="wb-sel-tools">${downloadTools(0)}</div></div>
           <div class="empty-msg">上传产品原图（默认全选）后，点上方「开始白底真修」将全部所选原图抠成 2000×2000 纯白底图</div>
         </div>`;
         savedBar.classList.remove("show");
@@ -301,7 +499,7 @@ window.BoardWhitebg = {
               ${sel ? `✓ 已选${ state.selectedWhitebgIds.length > 1 ? "#" + (selIdx + 1) : "" }` : "☐ 勾选"} · <strong>${escapeHtml(verTag)}</strong>
             </button>
             <button type="button" class="wb-delete-btn" data-delete-wb="${escapeHtml(item.id)}" title="直接删除此白底图">×</button>
-            <img src="${escapeHtml(fullUrl)}" alt="${escapeHtml(item.label)}" data-lightbox-src="${escapeHtml(fullUrl)}" data-lightbox-title="${escapeHtml(titleStr)}" />
+            <img src="${escapeHtml(API.thumbnailUrl(fullUrl))}" decoding="async" loading="eager" alt="${escapeHtml(item.label)}" data-lightbox-src="${escapeHtml(fullUrl)}" data-lightbox-title="${escapeHtml(titleStr)}" />
             <div class="wb-meta" data-toggle-wb="${escapeHtml(item.id)}">
               <div><strong>${escapeHtml(mName)} ${escapeHtml(verTag)}</strong> · <span style="color:var(--green);">真实</span></div>
               <div>2000×2000 · ${(item.ext || "png").toUpperCase()}</div>
@@ -324,6 +522,7 @@ window.BoardWhitebg = {
             <span style="font-size:12px;color:var(--green);font-weight:600;">已勾选 ${selectedRefs.length} 张</span>
             <button type="button" class="btn btn-ghost btn-sm" id="btn-wb-select-all" ${selectedRefs.length === items.length ? "disabled" : ""}>全选 (${items.length})</button>
             <button type="button" class="btn btn-ghost btn-sm" id="btn-wb-clear-sel" ${selectedRefs.length === 0 ? "disabled" : ""}>清空勾选</button>
+            ${downloadTools(selectedRefs.length)}
           </div>
         </div>
         <div class="result-thumbs">${cards}</div>
@@ -340,7 +539,7 @@ window.BoardWhitebg = {
           .slice(0, 6)
           .map((r) => {
             const u = API.fileUrl(r.imageUrl);
-            return `<img src="${escapeHtml(u)}" alt="${escapeHtml(r.label)}" data-lightbox-src="${escapeHtml(u)}" data-lightbox-title="${escapeHtml(r.label)}" title="${escapeHtml(r.label)}" />`;
+            return `<img src="${escapeHtml(API.thumbnailUrl(u))}" decoding="async" loading="eager" alt="${escapeHtml(r.label)}" data-lightbox-src="${escapeHtml(u)}" data-lightbox-title="${escapeHtml(r.label)}" title="${escapeHtml(r.label)}" />`;
           })
           .join("");
         const verSummary = selectedRefs.map((r) => `v${r.version}`).join("、");
@@ -908,6 +1107,14 @@ window.BoardWhitebg = {
 
       document.getElementById("whitebg-results").addEventListener("click", (e) => {
         if (e.target.closest("[data-lightbox-src]")) return;
+        if (e.target.closest("#btn-cancel-wb-download")) {
+          if (downloadController) downloadController.abort();
+          return;
+        }
+        if (e.target.closest("#btn-download-wb-selected")) {
+          downloadSelected();
+          return;
+        }
 
         const delBtn = e.target.closest("[data-delete-wb]");
         if (delBtn) {

@@ -1,4 +1,4 @@
-/* AI 做图看板 v5 (imgboard-15) — 新产品彻底隔离 + 秋霜/安然自动协同规划七图 + 留稿历史 */
+/* AI 做图看板 v5 (imgboard-17) — 新产品彻底隔离 + 秋霜/安然自动协同规划七图 + 自动留稿 */
 (function () {
   const STORAGE_KEY = "ai-image-board-v3";
   const LEGACY_KEY = "ai-image-board-v2";
@@ -26,7 +26,7 @@
   const chatRuntime = {};
   const sevenCollabRuntime = { busy: false, startedAt: 0, controller: null, sessionId: null };
   let WB = null;
-  let Hist = null;
+  let WorkspaceArchive = null;
   let lastDragEndAt = 0;
 
   function defaultState() {
@@ -579,7 +579,7 @@
 
     const emptyNew = isBlankNewProduct();
     document.getElementById("product-sub").textContent = emptyNew
-      ? "新产品工作台（已清空）· 请导入 ASIN / 粘贴产品数据；历史记录可回看旧稿"
+      ? "新产品工作台（已清空）· 请导入 ASIN / 粘贴产品数据；已留稿文件继续保留"
       : real
       ? `亚马逊 7 图 · ASIN ${state.asin || "—"} · 产品目录「${displayProductFolder()}」`
       : `亚马逊 7 图 Listing · 当前演示档案：${DEMO.product.name}（可导入真实 ASIN 如 B0GVDS8X33）`;
@@ -1207,7 +1207,7 @@
               const fullUrl = r.imageUrl ? API.fileUrl(r.imageUrl) : "";
               const zoomTitle = `${plan.title || plan.id} · ${r.label || `${m.name} ${vTag}`}`;
               const img = fullUrl
-                ? `<img src="${escapeHtml(fullUrl)}" alt="${escapeHtml(m.name)}" data-lightbox-src="${escapeHtml(fullUrl)}" data-lightbox-title="${escapeHtml(zoomTitle)}" />`
+                ? `<img src="${escapeHtml(API.thumbnailUrl(fullUrl))}" decoding="async" loading="eager" alt="${escapeHtml(m.name)}" data-lightbox-src="${escapeHtml(fullUrl)}" data-lightbox-title="${escapeHtml(zoomTitle)}" />`
                 : `<div class="ph-img ${m.cls}">${escapeHtml(m.name)}<br/>${escapeHtml(vTag)}</div>`;
               return `<div class="gen-card ${sel ? "selected" : ""}" data-box="${escapeHtml(plan.id)}" data-rid="${escapeHtml(r.id)}">
                 <button type="button" class="gen-ver-pill ${sel ? "checked" : ""}" data-select-gen="${escapeHtml(r.id)}" data-box="${escapeHtml(plan.id)}" title="点击勾选此图（提示词可用 ${escapeHtml(vTag)} 引用）">
@@ -1497,7 +1497,10 @@
     await API.triggerDownload(item.imageUrl, fname);
   }
 
+  let previewDownloading = false;
+
   async function downloadAllPreview() {
+    if (previewDownloading) return;
     const filled = state.preview
       .map((item, idx) => (item && item.imageUrl ? { item, idx } : null))
       .filter(Boolean);
@@ -1506,6 +1509,7 @@
       return;
     }
     const dlAllBtn = document.getElementById("btn-download-all-preview");
+    previewDownloading = true;
     if (dlAllBtn) dlAllBtn.disabled = true;
     const asinPart = (state.asin || "PRODUCT").replace(/[^A-Za-z0-9_-]/g, "") || "PRODUCT";
     const zipName = `${asinPart}_Listing_preview_${filled.length}imgs.zip`;
@@ -1517,17 +1521,14 @@
         slot: idx + 1,
         title: item.title || `slot${idx + 1}`,
       }));
-      const res = await API.postBlob(
-        "/api/preview/zip",
-        { items, asin: state.asin || asinPart, zipName, productName: state.productName || "" },
-        { timeoutMs: 120000 }
-      );
-      API.downloadBlob(res.blob, zipName);
-      const n = res.zipCount || filled.length;
-      toast(`已下载压缩包（${n} 张）：${zipName}`);
+      const result = await API.downloadZipBatches(items, {
+        zipName, body: { asin: state.asin || asinPart, productName: state.productName || "" }
+      });
+      toast(`已发起 ${result.count} 张预览原图、${result.packages} 个 ZIP 下载 · 多包请允许连续下载`);
     } catch (e) {
-      toast(`打包下载失败：${(e && e.message) || e}`);
+      toast(`打包下载失败：${(e && e.message) || e}（已发起下载 ${e.downloadedCount || 0}/${filled.length} 张）`);
     } finally {
+      previewDownloading = false;
       if (dlAllBtn) {
         const hasFilled = state.preview.some((it) => it && it.imageUrl);
         dlAllBtn.disabled = !hasFilled;
@@ -1539,7 +1540,7 @@
     const root = document.getElementById("preview-slots");
     const dlAllBtn = document.getElementById("btn-download-all-preview");
     const hasFilled = state.preview.some((it) => it && it.imageUrl);
-    if (dlAllBtn) dlAllBtn.disabled = !hasFilled;
+    if (dlAllBtn) dlAllBtn.disabled = previewDownloading || !hasFilled;
 
     root.innerHTML = state.preview
       .map((item, idx) => {
@@ -1551,7 +1552,7 @@
         const fullUrl = item.imageUrl ? API.fileUrl(item.imageUrl) : "";
         const zoomTitle = `预览槽 #${idx + 1} · ${item.title}（${modelDisplayName(item.model)} v${item.version} · 2000×2000）`;
         const ph = fullUrl
-          ? `<img class="slot-ph" style="object-fit:cover" src="${escapeHtml(fullUrl)}" alt="${escapeHtml(item.title)}" data-lightbox-src="${escapeHtml(fullUrl)}" data-lightbox-title="${escapeHtml(zoomTitle)}" />`
+          ? `<img class="slot-ph" style="object-fit:cover" src="${escapeHtml(API.thumbnailUrl(fullUrl))}" decoding="async" loading="eager" alt="${escapeHtml(item.title)}" data-lightbox-src="${escapeHtml(fullUrl)}" data-lightbox-title="${escapeHtml(zoomTitle)}" />`
           : `<div class="slot-ph ${m.cls}">${escapeHtml(m.name)} v${item.version}</div>`;
         return `<div class="preview-slot filled" data-slot="${idx}">
           <span class="slot-num">#${idx + 1}</span>
@@ -1601,7 +1602,7 @@
           .map((it, idx) => {
             const u = API.fileUrl(it.imageUrl);
             return `<div class="modal-multi-item">
-              <img src="${escapeHtml(u)}" alt="${escapeHtml(it.tag)}" data-lightbox-src="${escapeHtml(u)}" data-lightbox-title="多图参考 图${idx + 1} (${escapeHtml(it.tag)}) · ${escapeHtml(it.label)}" />
+              <img src="${escapeHtml(API.thumbnailUrl(u))}" decoding="async" loading="eager" alt="${escapeHtml(it.tag)}" data-lightbox-src="${escapeHtml(u)}" data-lightbox-title="多图参考 图${idx + 1} (${escapeHtml(it.tag)}) · ${escapeHtml(it.label)}" />
               <span>图${idx + 1} ← ${escapeHtml(it.tag)}</span>
             </div>`;
           })
@@ -1616,7 +1617,7 @@
         </div>`;
       } else {
         const u = API.fileUrl(wbRef.imageUrl);
-        refCard.innerHTML = `<img src="${escapeHtml(u)}" alt="${escapeHtml(wbRef.label)}" data-lightbox-src="${escapeHtml(u)}" data-lightbox-title="绑定白底产品基准图 · ${escapeHtml(wbRef.label)}" />
+        refCard.innerHTML = `<img src="${escapeHtml(API.thumbnailUrl(u))}" decoding="async" loading="eager" alt="${escapeHtml(wbRef.label)}" data-lightbox-src="${escapeHtml(u)}" data-lightbox-title="绑定白底产品基准图 · ${escapeHtml(wbRef.label)}" />
           <div>
             <div><strong>🔒 强制绑定产品本体：${escapeHtml(wbRef.label)}</strong></div>
             <div style="font-size:11px;opacity:.9;">严格保持原产品外形/结构/颜色/比例/材质不变；提示词写 v1/v3/v6 可自动传多张参考图</div>
@@ -1992,7 +1993,7 @@
       .map((r, idx) => {
         const fullUrl = API.fileUrl(r.imageUrl);
         return `<div class="upload-lib-card" title="${escapeHtml(r.label || "")}">
-          <img src="${escapeHtml(fullUrl)}" alt="${escapeHtml(r.label || "upload")}" data-lightbox-src="${escapeHtml(fullUrl)}" data-lightbox-title="${escapeHtml(r.label || "自有上传图")}" />
+          <img src="${escapeHtml(API.thumbnailUrl(fullUrl))}" decoding="async" loading="eager" alt="${escapeHtml(r.label || "upload")}" data-lightbox-src="${escapeHtml(fullUrl)}" data-lightbox-title="${escapeHtml(r.label || "自有上传图")}" />
           <div class="meta">${escapeHtml(r.label || "upload")}</div>
           <button type="button" class="btn btn-ghost btn-sm" style="width:100%;border:none;border-top:1px solid var(--line);border-radius:0;padding:3px 4px;font-size:10px;" data-use-as-wbsrc="${idx}">设为白底原图</button>
         </div>`;
@@ -2082,7 +2083,7 @@
       st.textContent = ok ? `✓ 已入库 ${ok} 张（2000×2000 PNG/JPG）→ ${displayProductFolder()}/过程图/` : "上传失败";
     }
     if (ok) {
-      toast(switchedFromPrior ? `已上传 ${ok} 张（2000×2000）并选中（历史图仍保留在框内）` : `已上传 ${ok} 张自有图（2000×2000）至「过程图/」`, { duration: 4200 });
+      toast(switchedFromPrior ? `已上传 ${ok} 张（2000×2000）并选中（旧图仍保留在框内）` : `已上传 ${ok} 张自有图（2000×2000）至「过程图/」`, { duration: 4200 });
     }
   }
 
@@ -2891,7 +2892,7 @@
       }
     });
     document.getElementById("btn-reset").addEventListener("click", () => {
-      if (!window.confirm("清空当前工作台本机状态？历史记录不会删除。")) return;
+      if (!window.confirm("清空当前工作台本机状态？已留稿文件不会删除。")) return;
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(LEGACY_KEY);
       // keep HISTORY_KEY
@@ -2937,8 +2938,8 @@
 
   async function bootServer() {
     try {
-      serverStatus = await API.get("/api/status");
-      const list = await API.get("/api/voc/list");
+      const [status, list] = await Promise.all([API.get("/api/status"), API.get("/api/voc/list")]);
+      serverStatus = status;
       const dl = document.getElementById("voc-fixtures");
       dl.innerHTML = "";
       (list.fixtures || []).forEach((t) => {
@@ -2949,12 +2950,24 @@
       });
       if (isRealMode() && state.asin && !state.whitebgResults.length && WB) {
         try {
+          const requested = {
+            session: state.productSessionId, asin: state.asin, name: state.productName,
+          };
           const wb = await API.get(
-            `/api/whitebg/list?asin=${encodeURIComponent(state.asin)}&productName=${encodeURIComponent(state.productName || "")}`,
+            `/api/whitebg/list?asin=${encodeURIComponent(requested.asin)}&productName=${encodeURIComponent(requested.name || "")}`,
             { timeoutMs: 10000 }
           );
-          if (wb && wb.productDir) state.productDir = wb.productDir;
-          if (wb && wb.items && wb.items.length) { WB.hydrateExisting(wb.items); saveState(); }
+          const stillCurrent = isRealMode() && state.productSessionId === requested.session &&
+            state.asin === requested.asin && state.productName === requested.name && !state.whitebgResults.length;
+          if (stillCurrent) {
+            if (wb && wb.productDir) state.productDir = wb.productDir;
+            if (wb && wb.items && wb.items.length) {
+              WB.hydrateExisting(wb.items);
+              WB.renderResults();
+              WB.renderBoardPicker();
+              saveState();
+            }
+          }
         } catch (_) {}
       }
       renderProviderStatus();
@@ -2975,23 +2988,25 @@
       ensureBox, currentPlans, findPlan, reconcilePreviewFlags, refreshStatusQuiet,
       displayProductFolder, readFileAsDataURL, effectiveAsin,
       onFinalArchived: async (meta) => {
-        if (!Hist) return;
+        if (!WorkspaceArchive) return;
         try {
-          await Hist.saveCurrent({
+          await WorkspaceArchive.saveCurrent({
             status: "final-synced",
             note: (meta && meta.note) || "定稿同步后自动留存分析报告",
             silent: !!(meta && meta.silent),
           });
-        } catch (_) {}
+        } catch (error) {
+          toast(error.message || "分析报告留稿失败，当前工作台仍保留。", { duration: 6500 });
+        }
       },
     });
-    Hist = window.BoardHistory.create({
+    WorkspaceArchive = window.BoardWorkspace.create({
       state, API, DEMO, toast, saveState, setModeUI,
-      renderArchive, renderPlans, renderPreview, renderUploadLib, WB, escapeHtml,
+      renderArchive, renderPlans, renderPreview, renderUploadLib, WB,
       abortAllInFlight,
     });
     reconcilePreviewFlags();
-    await bootServer();
+    // Cached workspace images must render before any metadata round-trip.
     setModeUI();
     renderArchive();
     WB.renderUploads();
@@ -3001,6 +3016,7 @@
     renderPreview();
     renderUploadLib();
     bindGlobal();
+    bootServer().then(() => { renderPlans(); });
 
     if (needsSummaryRefresh && (state.productSummary || "").trim()) {
       applyProductData({ silent: true });

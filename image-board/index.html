@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AI 做图看板</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23c45c26'/%3E%3Ctext x='32' y='43' font-size='30' text-anchor='middle' fill='%23fff' font-family='sans-serif'%3E图%3C/text%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="css/board.css?v=imgboard-15" />
+  <link rel="stylesheet" href="css/board.css?v=imgboard-17" />
 </head>
 <body>
   <div class="demo-banner" id="top-banner">
@@ -22,11 +22,10 @@
     <div class="header-actions">
       <a class="btn btn-ghost btn-sm" href="../tool/">← 总工作台</a>
       <span class="tag tag-demo" id="mode-tag">演示数据</span>
-      <button class="btn btn-primary btn-sm" id="btn-new-product" type="button" title="先把预览图自动留到桌面产品文件夹，再归档历史并清空工作台">给新产品做图</button>
-      <button class="btn btn-sm" id="btn-history" type="button" title="查看已留存的分析报告">历史记录</button>
-      <button class="btn btn-ghost btn-sm" id="btn-save-history" type="button" title="把当前分析流程写入历史记录">保存分析报告</button>
+      <button class="btn btn-primary btn-sm" id="btn-new-product" type="button" title="先把预览图自动留到桌面产品文件夹，再保存分析留稿并清空工作台">给新产品做图</button>
+      <button class="btn btn-ghost btn-sm" id="btn-save-report" type="button" title="为当前产品的分析流程保存留稿">保存分析报告</button>
       <button class="btn btn-ghost btn-sm" id="btn-demo-mode" type="button">切回演示数据</button>
-      <button class="btn btn-ghost btn-sm" id="btn-reset" type="button" title="清空本机工作台状态（不含历史记录）">重置状态</button>
+      <button class="btn btn-ghost btn-sm" id="btn-reset" type="button" title="清空本机工作台状态（不删除已留稿文件）">重置状态</button>
       <button class="btn btn-sm" id="btn-jump-preview" type="button">跳到预览框 ↓</button>
     </div>
   </header>
@@ -242,28 +241,13 @@
   </div>
 
 
-  <!-- History panel -->
-  <div class="history-backdrop" id="history-panel" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-label="历史记录">
-    <div class="history-modal">
-      <div class="history-modal-head">
-        <h2>历史记录 · 产品分析报告</h2>
-        <button type="button" class="btn btn-ghost btn-sm" id="btn-history-close">关闭</button>
-      </div>
-      <p class="history-lead">白底图与最终版本落在桌面「产品名」文件夹；完整分析流程报告在此回看。点「给新产品做图」会先自动把预览图写入桌面产品文件夹，再归档历史并清空工作台。</p>
-      <div class="history-body">
-        <div class="history-list" id="history-list"></div>
-        <div class="history-detail" id="history-detail"></div>
-      </div>
-    </div>
-  </div>
-
   <div class="toast" id="toast"></div>
 
-  <script src="js/api-config.js?v=imgboard-15"></script>
-  <script src="js/api.js?v=imgboard-15"></script>
-  <script src="js/demo-data.js?v=imgboard-15"></script>
-  <script src="js/whitebg.js?v=imgboard-15"></script>
-  <script src="js/history.js?v=imgboard-15"></script>
-  <script src="js/app.js?v=imgboard-15"></script>
+  <script src="js/api-config.js?v=imgboard-17"></script>
+  <script src="js/api.js?v=imgboard-17"></script>
+  <script src="js/demo-data.js?v=imgboard-17"></script>
+  <script src="js/whitebg.js?v=imgboard-17"></script>
+  <script src="js/workspace.js?v=imgboard-17"></script>
+  <script src="js/app.js?v=imgboard-17"></script>
 </body>
 </html>
