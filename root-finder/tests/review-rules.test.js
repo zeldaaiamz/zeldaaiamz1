@@ -2,15 +2,15 @@
 const fs=require('fs'),path=require('path'),dir=path.join(__dirname,'..');
 const a=fs.readFileSync(path.join(dir,'app.js'),'utf8');
 const H=require('./_screening-harness.js')({laneRules:false}),S=H.S,beijingCutoff=H.beijingCutoff,youngMarketReasons=H.youngMarketReasons;// 只测原有规则（赛道级门槛在 lane-rules.test.js）
-const row=(rc,hi,hr)=>({queried:true,products:[...Array(10)].map((_,i)=>({asin:'A'+i,price:hi.includes(i)?100:10,title:'Notebook 2 Pack 8.5 x 11 inch',monthlyPurchases:'100+',ratingCount:hi.includes(i)?hr[hi.indexOf(i)]:rc}))});
+const row=(rc,hi,hr)=>({queried:true,products:[...Array(10)].map((_,i)=>({asin:'A'+i,price:hi.includes(i)?100:10,title:'Notebook 2 Pack 8.5 x 11 inch',monthlyPurchases:'100+',ratingCount:hi.includes(i)?hr[hi.indexOf(i)]:rc,firstAvailableDate:'2026-03-01'}))});   // v3.1：上架日缺失的高价异常不算确定理由，这里给定新品日期只测评价规则
 const t=(name,r,f)=>{const m=S(r,5,0,50);if(!f(m))throw Error(name+' '+JSON.stringify(m));};
 t('single>500',row(10,[0],[600]),r=>!r.anomalies.length&&r.anomalyReviewExcluded&&r.priceFloor);
 t('single<=500',row(10,[0],[500]),r=>r.anomalies.length==1);
 t('multi all>500',row(10,[0,1],[600,'1,200']),r=>!r.anomalies.length);
 t('multi mixed',row(10,[0,1],[600,300]),r=>r.anomalies.length==2);
 t('missing reviews',row(10,[0],[null]),r=>r.anomalies.length==1);
-t('top10 all>500',row(900,[],[]),r=>r.reviewExcluded&&!r.priceFloor);
-t('lowcomp untouched',{queried:true,products:[{asin:'x',price:9,ratingCount:9999}]},r=>r.lowCompetition&&!r.reviewExcluded);
+t('top10 all>500 → v3.1 不再清空理由，只标 top10AllHigh（门槛后 L12 待人工）',row(900,[],[]),r=>r.top10AllHigh&&r.priceFloor&&!r.reviewExcluded);
+t('lowcomp untouched',{queried:true,products:[{asin:'x',price:9,ratingCount:9999}]},r=>r.lowCompetition&&!r.top10AllHigh&&!r.reviewExcluded);
 const dated=ds=>({queried:true,products:ds.map((d,i)=>({asin:'D'+i,price:i?10:100,title:'Notebook 2 Pack 8.5 x 11 inch',monthlyPurchases:'100+',ratingCount:10,firstAvailableDate:d}))});
 t('D2 removed: top10 all<2022 no longer a top10 exclusion',dated(Array(10).fill('2021-12-31')),r=>!r.reviewExcluded);
 t('one 2022',dated([...Array(9).fill('2019-05-01'),'2022-01-01']),r=>!r.reviewExcluded&&r.priceFloor);

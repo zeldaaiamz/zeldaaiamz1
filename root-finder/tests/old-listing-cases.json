@@ -1,300 +1,321 @@
 {
-  "threshold": "rolling-12m",
-  "reason": "高价品全部早于近12个月上架（老品赛道），不按高价异常入选",
-  "cases": [
-    {
-      "name": "single old 2025-12-31 excluded",
-      "hi": [
-        0
-      ],
-      "dates": [
-        "2025-12-31"
-      ],
-      "expect": {
-        "anomalies": 0,
-        "old": true,
-        "unknown": 0,
-        "priceFloor": true
-      },
-      "others": "2026-03-01"
-    },
-    {
-      "name": "single new 2026-01-01 kept (boundary)",
-      "hi": [
-        0
-      ],
-      "dates": [
-        "2026-01-01"
-      ],
-      "expect": {
-        "anomalies": 1,
-        "old": false,
-        "unknown": 0
-      }
-    },
-    {
-      "name": "multi all old excluded",
-      "hi": [
-        0,
-        1
-      ],
-      "dates": [
-        "2019-03-02",
-        "2025-07-15"
-      ],
-      "expect": {
-        "anomalies": 0,
-        "old": true,
-        "unknown": 0
-      }
-    },
-    {
-      "name": "multi one new kept",
-      "hi": [
-        0,
-        1
-      ],
-      "dates": [
-        "2019-03-02",
-        "2026-02-10"
-      ],
-      "expect": {
-        "anomalies": 2,
-        "old": false,
-        "unknown": 0
-      }
-    },
-    {
-      "name": "missing null kept",
-      "hi": [
-        0
-      ],
-      "dates": [
-        null
-      ],
-      "expect": {
-        "anomalies": 1,
-        "old": false,
-        "unknown": 1
-      }
-    },
-    {
-      "name": "missing empty + old kept (missing not treated as old)",
-      "hi": [
-        0,
-        1
-      ],
-      "dates": [
-        "",
-        "2020-01-01"
-      ],
-      "expect": {
-        "anomalies": 2,
-        "old": false,
-        "unknown": 1
-      }
-    },
-    {
-      "name": "garbage string kept",
-      "hi": [
-        0
-      ],
-      "dates": [
-        "unknown"
-      ],
-      "expect": {
-        "anomalies": 1,
-        "old": false,
-        "unknown": 1
-      }
-    },
-    {
-      "name": "invalid month kept",
-      "hi": [
-        0
-      ],
-      "dates": [
-        "2025-13-01"
-      ],
-      "expect": {
-        "anomalies": 1,
-        "old": false,
-        "unknown": 1
-      }
-    },
-    {
-      "name": "unpadded 2025-6-1 old",
-      "hi": [
-        0
-      ],
-      "dates": [
-        "2025-6-1"
-      ],
-      "expect": {
-        "anomalies": 0,
-        "old": true,
-        "unknown": 0
-      }
-    },
-    {
-      "name": "slash 2025/12/31 old",
-      "hi": [
-        0
-      ],
-      "dates": [
-        "2025/12/31"
-      ],
-      "expect": {
-        "anomalies": 0,
-        "old": true,
-        "unknown": 0
-      }
-    },
-    {
-      "name": "iso datetime 2026-01-01T00:00:00Z kept",
-      "hi": [
-        0
-      ],
-      "dates": [
-        "2026-01-01T00:00:00Z"
-      ],
-      "expect": {
-        "anomalies": 1,
-        "old": false,
-        "unknown": 0
-      }
-    },
-    {
-      "name": "unix seconds 2025-06-01 old",
-      "hi": [
-        0
-      ],
-      "dates": [
-        1748736000
-      ],
-      "expect": {
-        "anomalies": 0,
-        "old": true,
-        "unknown": 0
-      }
-    },
-    {
-      "name": "unix ms 2026-03-01 kept",
-      "hi": [
-        0
-      ],
-      "dates": [
-        1772323200000
-      ],
-      "expect": {
-        "anomalies": 1,
-        "old": false,
-        "unknown": 0
-      }
-    },
-    {
-      "name": "numeric string seconds old",
-      "hi": [
-        0
-      ],
-      "dates": [
-        "1748736000"
-      ],
-      "expect": {
-        "anomalies": 0,
-        "old": true,
-        "unknown": 0
-      }
-    },
-    {
-      "name": "bare small number 2025 is not a timestamp (unknown, kept)",
-      "hi": [
-        0
-      ],
-      "dates": [
-        2025
-      ],
-      "expect": {
-        "anomalies": 1,
-        "old": false,
-        "unknown": 1
-      }
-    },
-    {
-      "name": "8-digit 20250601 unknown (kept)",
-      "hi": [
-        0
-      ],
-      "dates": [
-        "20250601"
-      ],
-      "expect": {
-        "anomalies": 1,
-        "old": false,
-        "unknown": 1
-      }
-    },
-    {
-      "name": "seconds = 2026-01-01 00:00 Beijing kept",
-      "hi": [
-        0
-      ],
-      "dates": [
-        1767196800
-      ],
-      "expect": {
-        "anomalies": 1,
-        "old": false,
-        "unknown": 0
-      }
-    },
-    {
-      "name": "seconds = 2025-12-31 23:59 Beijing old",
-      "hi": [
-        0
-      ],
-      "dates": [
-        1767196740
-      ],
-      "expect": {
-        "anomalies": 0,
-        "old": true,
-        "unknown": 0
-      }
-    },
-    {
-      "name": "review rule wins over old rule",
-      "hi": [
-        0
-      ],
-      "dates": [
-        "2020-01-01"
-      ],
-      "reviews": [
-        900
-      ],
-      "expect": {
-        "anomalies": 0,
-        "old": false,
-        "review": true
-      }
-    },
-    {
-      "name": "D2 removed: all 10 before 2022 → anomaly old rule applies (no top10 exclusion)",
-      "hi": [
-        0
-      ],
-      "dates": [
-        "2018-01-01"
-      ],
-      "others": "2019-01-01",
-      "expect": {
-        "anomalies": 0,
-        "old": true,
-        "unknown": 0
-      }
-    }
-  ],
-  "testCutoff": "2026-01-01",
-  "note": "规则 v2：截止日改为滚动「近12个月」（beijing_cutoff）；测试里把截止日固定为 2026-01-01，原有日期用例不变"
+ "threshold": "rolling-12m",
+ "reason": "高价品全部早于近12个月上架（老品赛道），不按高价异常入选",
+ "cases": [
+  {
+   "name": "single old 2025-12-31 excluded",
+   "hi": [
+    0
+   ],
+   "dates": [
+    "2025-12-31"
+   ],
+   "expect": {
+    "anomalies": 0,
+    "old": true,
+    "unknown": 0,
+    "priceFloor": true,
+    "dateUnknown": 0
+   },
+   "others": "2026-03-01"
+  },
+  {
+   "name": "single new 2026-01-01 kept (boundary)",
+   "hi": [
+    0
+   ],
+   "dates": [
+    "2026-01-01"
+   ],
+   "expect": {
+    "anomalies": 1,
+    "old": false,
+    "unknown": 0,
+    "dateUnknown": 0
+   }
+  },
+  {
+   "name": "multi all old excluded",
+   "hi": [
+    0,
+    1
+   ],
+   "dates": [
+    "2019-03-02",
+    "2025-07-15"
+   ],
+   "expect": {
+    "anomalies": 0,
+    "old": true,
+    "unknown": 0,
+    "dateUnknown": 0
+   }
+  },
+  {
+   "name": "multi one new kept",
+   "hi": [
+    0,
+    1
+   ],
+   "dates": [
+    "2019-03-02",
+    "2026-02-10"
+   ],
+   "expect": {
+    "anomalies": 2,
+    "old": false,
+    "unknown": 0,
+    "dateUnknown": 0
+   }
+  },
+  {
+   "name": "missing null → 待人工(v3.1 Q7)",
+   "hi": [
+    0
+   ],
+   "dates": [
+    null
+   ],
+   "expect": {
+    "anomalies": 0,
+    "old": false,
+    "unknown": 1,
+    "dateUnknown": 1
+   }
+  },
+  {
+   "name": "missing empty + old → 待人工(v3.1 Q7) (missing not treated as old)",
+   "hi": [
+    0,
+    1
+   ],
+   "dates": [
+    "",
+    "2020-01-01"
+   ],
+   "expect": {
+    "anomalies": 0,
+    "old": false,
+    "unknown": 1,
+    "dateUnknown": 2
+   }
+  },
+  {
+   "name": "garbage string → 待人工(v3.1 Q7)",
+   "hi": [
+    0
+   ],
+   "dates": [
+    "unknown"
+   ],
+   "expect": {
+    "anomalies": 0,
+    "old": false,
+    "unknown": 1,
+    "dateUnknown": 1
+   }
+  },
+  {
+   "name": "invalid month → 待人工(v3.1 Q7)",
+   "hi": [
+    0
+   ],
+   "dates": [
+    "2025-13-01"
+   ],
+   "expect": {
+    "anomalies": 0,
+    "old": false,
+    "unknown": 1,
+    "dateUnknown": 1
+   }
+  },
+  {
+   "name": "unpadded 2025-6-1 old",
+   "hi": [
+    0
+   ],
+   "dates": [
+    "2025-6-1"
+   ],
+   "expect": {
+    "anomalies": 0,
+    "old": true,
+    "unknown": 0,
+    "dateUnknown": 0
+   }
+  },
+  {
+   "name": "slash 2025/12/31 old",
+   "hi": [
+    0
+   ],
+   "dates": [
+    "2025/12/31"
+   ],
+   "expect": {
+    "anomalies": 0,
+    "old": true,
+    "unknown": 0,
+    "dateUnknown": 0
+   }
+  },
+  {
+   "name": "iso datetime 2026-01-01T00:00:00Z kept",
+   "hi": [
+    0
+   ],
+   "dates": [
+    "2026-01-01T00:00:00Z"
+   ],
+   "expect": {
+    "anomalies": 1,
+    "old": false,
+    "unknown": 0,
+    "dateUnknown": 0
+   }
+  },
+  {
+   "name": "unix seconds 2025-06-01 old",
+   "hi": [
+    0
+   ],
+   "dates": [
+    1748736000
+   ],
+   "expect": {
+    "anomalies": 0,
+    "old": true,
+    "unknown": 0,
+    "dateUnknown": 0
+   }
+  },
+  {
+   "name": "unix ms 2026-03-01 kept",
+   "hi": [
+    0
+   ],
+   "dates": [
+    1772323200000
+   ],
+   "expect": {
+    "anomalies": 1,
+    "old": false,
+    "unknown": 0,
+    "dateUnknown": 0
+   }
+  },
+  {
+   "name": "numeric string seconds old",
+   "hi": [
+    0
+   ],
+   "dates": [
+    "1748736000"
+   ],
+   "expect": {
+    "anomalies": 0,
+    "old": true,
+    "unknown": 0,
+    "dateUnknown": 0
+   }
+  },
+  {
+   "name": "bare small number 2025 is not a timestamp (unknown, → 待人工(v3.1 Q7))",
+   "hi": [
+    0
+   ],
+   "dates": [
+    2025
+   ],
+   "expect": {
+    "anomalies": 0,
+    "old": false,
+    "unknown": 1,
+    "dateUnknown": 1
+   }
+  },
+  {
+   "name": "8-digit 20250601 unknown → 待人工 v3.1",
+   "hi": [
+    0
+   ],
+   "dates": [
+    "20250601"
+   ],
+   "expect": {
+    "anomalies": 0,
+    "old": false,
+    "unknown": 1,
+    "dateUnknown": 1
+   }
+  },
+  {
+   "name": "seconds = 2026-01-01 00:00 Beijing kept",
+   "hi": [
+    0
+   ],
+   "dates": [
+    1767196800
+   ],
+   "expect": {
+    "anomalies": 1,
+    "old": false,
+    "unknown": 0,
+    "dateUnknown": 0
+   }
+  },
+  {
+   "name": "seconds = 2025-12-31 23:59 Beijing old",
+   "hi": [
+    0
+   ],
+   "dates": [
+    1767196740
+   ],
+   "expect": {
+    "anomalies": 0,
+    "old": true,
+    "unknown": 0,
+    "dateUnknown": 0
+   }
+  },
+  {
+   "name": "review rule wins over old rule",
+   "hi": [
+    0
+   ],
+   "dates": [
+    "2020-01-01"
+   ],
+   "reviews": [
+    900
+   ],
+   "expect": {
+    "anomalies": 0,
+    "old": false,
+    "review": true,
+    "dateUnknown": 0
+   }
+  },
+  {
+   "name": "D2 removed: all 10 before 2022 → anomaly old rule applies (no top10 exclusion)",
+   "hi": [
+    0
+   ],
+   "dates": [
+    "2018-01-01"
+   ],
+   "others": "2019-01-01",
+   "expect": {
+    "anomalies": 0,
+    "old": true,
+    "unknown": 0,
+    "dateUnknown": 0
+   }
+  }
+ ],
+ "testCutoff": "2026-01-01",
+ "note": "规则 v2：截止日改为滚动「近12个月」（beijing_cutoff）；测试里把截止日固定为 2026-01-01，原有日期用例不变",
+ "v31": "上架日缺失的已确认高价异常不算确定入选理由，移到 anomaliesDateUnknown（没有别的入选理由时待人工，v3.1 Q7）"
 }
