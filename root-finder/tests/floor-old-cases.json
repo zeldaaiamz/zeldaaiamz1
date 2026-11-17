@@ -1,0 +1,276 @@
+{
+ "threshold": "2026-01-01",
+ "reason": "前10个产品上架时间均早于2026年，不按高于底价入选",
+ "floor": 5,
+ "anomalyPercent": 50,
+ "cases": [
+  {
+   "name": "all 10 before 2026 (latest 2025-12-31, boundary) → 高于底价 excluded",
+   "dates": [
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-12-31",
+    "2025-06-01",
+    "2025-06-01"
+   ],
+   "expect": {
+    "priceFloor": false,
+    "floorOld": true,
+    "unknown": 0,
+    "qualifies": false
+   }
+  },
+  {
+   "name": "one listed 2026-01-01 (boundary) → kept",
+   "dates": [
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2026-01-01"
+   ],
+   "expect": {
+    "priceFloor": true,
+    "floorOld": false,
+    "qualifies": true
+   }
+  },
+  {
+   "name": "one listed 2026-11-01 → kept",
+   "dates": [
+    "2026-11-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01"
+   ],
+   "expect": {
+    "priceFloor": true,
+    "floorOld": false,
+    "qualifies": true
+   }
+  },
+  {
+   "name": "one missing (null) → kept (拿不准放行)",
+   "dates": [
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    null,
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01"
+   ],
+   "expect": {
+    "priceFloor": true,
+    "floorOld": false,
+    "unknown": 1,
+    "qualifies": true
+   }
+  },
+  {
+   "name": "one empty string → kept",
+   "dates": [
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01"
+   ],
+   "expect": {
+    "priceFloor": true,
+    "floorOld": false,
+    "unknown": 1
+   }
+  },
+  {
+   "name": "one unparseable (2025 / 2025-13-01) → kept",
+   "dates": [
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025",
+    "2025-13-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01"
+   ],
+   "expect": {
+    "priceFloor": true,
+    "floorOld": false,
+    "unknown": 2
+   }
+  },
+  {
+   "name": "mixed formats all old (slash, no zero pad, ISO, unix s, unix ms) → excluded",
+   "dates": [
+    "2025/6/1",
+    "2025-3-4",
+    "2025-03-04T10:00:00Z",
+    1700000000,
+    "1700000000000",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01"
+   ],
+   "expect": {
+    "priceFloor": false,
+    "floorOld": true,
+    "unknown": 0
+   }
+  },
+  {
+   "name": "unix ts 2025-12-31T16:00Z = 2026-01-01 Beijing → kept",
+   "dates": [
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    1767196800,
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01"
+   ],
+   "expect": {
+    "priceFloor": true,
+    "floorOld": false
+   }
+  },
+  {
+   "name": "below floor + all old → not 高于底价, rule not flagged",
+   "dates": [
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01"
+   ],
+   "prices": [
+    4,
+    10,
+    10,
+    10,
+    10,
+    10,
+    10,
+    10,
+    10,
+    10
+   ],
+   "expect": {
+    "priceFloor": false,
+    "floorOld": false
+   }
+  },
+  {
+   "name": "all old + young market (reviews all <200) → young kept, 高于底价 removed",
+   "dates": [
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01"
+   ],
+   "reviews": 100,
+   "expect": {
+    "priceFloor": false,
+    "floorOld": true,
+    "young": true,
+    "qualifies": true
+   }
+  },
+  {
+   "name": "all old + confirmed anomaly (old) → both removed, not qualified",
+   "dates": [
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01",
+    "2025-06-01"
+   ],
+   "prices": [
+    100,
+    10,
+    10,
+    10,
+    10,
+    10,
+    10,
+    10,
+    10,
+    10
+   ],
+   "expect": {
+    "priceFloor": false,
+    "floorOld": true,
+    "anomalies": 0,
+    "qualifies": false
+   }
+  },
+  {
+   "name": "all before 2022 → top10 rule takes precedence",
+   "dates": [
+    "2019-05-05",
+    "2019-05-05",
+    "2019-05-05",
+    "2019-05-05",
+    "2019-05-05",
+    "2019-05-05",
+    "2019-05-05",
+    "2019-05-05",
+    "2019-05-05",
+    "2019-05-05"
+   ],
+   "expect": {
+    "priceFloor": false,
+    "floorOld": false,
+    "top10": true,
+    "qualifies": false
+   }
+  }
+ ]
+}

@@ -15,7 +15,8 @@
         "old": true,
         "unknown": 0,
         "priceFloor": true
-      }
+      },
+      "others": "2026-03-01"
     },
     {
       "name": "single new 2026-01-01 kept (boundary)",
