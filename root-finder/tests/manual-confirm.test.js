@@ -1,7 +1,7 @@
 // node root-finder/tests/manual-confirm.test.js — 待人工赛道「人工确认入库」（Hongyan 2026-11-17 20:28）。纯本地，不联网。
 const fs=require('fs'),path=require('path'),dir=path.join(__dirname,'..');
 const a=fs.readFileSync(path.join(dir,'app.js'),'utf8'),q=fs.readFileSync(path.join(dir,'quality.js'),'utf8'),h=fs.readFileSync(path.join(dir,'index.html'),'utf8');
-const lanesPy=fs.readFileSync('/workspace/rf-abovefloor/backend/lanes.py','utf8');
+const BE=process.env.RF_BACKEND||'/workspace/rf-abovefloor/backend',lanesPy=fs.existsSync(path.join(BE,'lanes.py'))?fs.readFileSync(path.join(BE,'lanes.py'),'utf8'):null;   // 后端不在本机时跳过对照项
 let fails=0;const check=(n,ok,info='')=>{console.log((ok?'ok ':'FAIL ')+n,ok?'':info);if(!ok)fails++;};
 const grab=(src,n)=>{const i=src.search(new RegExp('(async )?function '+n+'\\('));if(i<0)throw Error('missing '+n);let d=0;for(let k=src.indexOf('{',i);;k++){if(src[k]=='{')d++;if(src[k]=='}'&&--d==0)return src.slice(i,k+1);}};
 // 1) 面板：按钮（带来源任务 id + 关键词），已入库的不再显示，忙时禁用
@@ -26,6 +26,6 @@ async function run(out,opts={}){const calls=[],notes=[],errs=[];let refreshed=0,
  r=await run(null,{fail:true});
  check('request fails → error shown, busy released',r.errs.some(e=>/boom/.test(e))&&r.rendered>=1,JSON.stringify(r));
  // 3) 前后端同口径：后端认 manual is True；前端发 manual:true
- check('backend accepts only manual is True',/body\.get\('manual'\) is True/.test(lanesPy)&&/manual_confirmable\(row,record\)/.test(lanesPy));
+ if(lanesPy===null)console.log('skip backend parity (RF_BACKEND not found)');else check('backend accepts only manual is True',/body\.get\('manual'\) is True/.test(lanesPy)&&/manual_confirmable\(row,record\)/.test(lanesPy));
  check('notice no longer says 待人工 不会入库',/人工确认入库/.test(h)&&!/不计入入选，也不会入库/.test(h));
  if(fails){console.error(fails+' failing');process.exit(1);}console.log('manual confirm ok');})();
