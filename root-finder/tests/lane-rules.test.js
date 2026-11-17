@@ -40,4 +40,5 @@ check('rowPass excludes 待人工',/function rowPass\(row\)\{const m=rowMatch\(r
  const t=H2.S(mk(()=>({ratingCount:900,filledFields:['ratingCount'],firstAvailableDate:'2026-05-01'})),5,0,50);check('filled reviews do not make top10AllHigh',!t.top10AllHigh);
  const lane=H.S(mk(i=>({ratingCount:300,firstAvailableDate:i?'2020-01-01':'2026-05-01',filledFields:i?[]:['firstAvailableDate']})),5,0,50);check('lane rules still use filled date (新品门槛过)',!lane.newMarketExcluded&&!lane.newMarketUnknown&&lane.priceFloor);}
 {const h=fs.readFileSync(path.join(dir,'index.html'),'utf8');check('FE version rules-v31-1',/app\.js\?v=rules-v31-1/.test(h)&&/quality\.js\?v=rules-v31-1/.test(h));}
+{const q=fs.readFileSync(path.join(dir,'quality.js'),'utf8'),h=fs.readFileSync(path.join(dir,'index.html'),'utf8');check('待人工-only rows: no 待补购买量 chip / 重新核实 button',/\$\{pend\?aiRowChip\(r\):''\}/.test(q)&&/\$\{pend\?aiRowButton\(r\):''\}/.test(q));check('待人工 panel notice explains v3.1',/待人工：/.test(h));}
 if(fails){console.error(fails+' failing');process.exit(1);}console.log('lane-rules v3.1 ok');
