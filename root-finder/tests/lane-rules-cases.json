@@ -603,7 +603,7 @@
    }
   },
   {
-   "name": "N8 median $14.99 → excluded",
+   "name": "N8 median $14.99 → kept in v2c (N8 off)",
    "prices": [
     14.99,
     14.99,
@@ -665,10 +665,10 @@
     4.5
    ],
    "expect": {
-    "excluded": "medianPriceLowExcluded",
+    "excluded": null,
     "darkHorses": [],
     "improvable": false,
-    "qualifies": false
+    "qualifies": true
    }
   },
   {
@@ -1575,7 +1575,7 @@
    }
   },
   {
-   "name": "N7 top3 81% → excluded",
+   "name": "N7 top3 81% → kept in v2c (N7 off)",
    "prices": [
     20,
     20,
@@ -1637,10 +1637,10 @@
     4.5
    ],
    "expect": {
-    "excluded": "top3ShareExcluded",
+    "excluded": null,
     "darkHorses": [],
     "improvable": false,
-    "qualifies": false
+    "qualifies": true
    }
   },
   {
@@ -1782,7 +1782,7 @@
    }
   },
   {
-   "name": "N7 top3 75.01% → excluded",
+   "name": "N7 top3 75.01% → kept in v2c (N7 off)",
    "prices": [
     20,
     20,
@@ -1844,14 +1844,14 @@
     4.5
    ],
    "expect": {
-    "excluded": "top3ShareExcluded",
+    "excluded": null,
     "darkHorses": [],
     "improvable": false,
-    "qualifies": false
+    "qualifies": true
    }
   },
   {
-   "name": "N7 top3 by sales not by rank (big sellers at rank 8-10) → excluded",
+   "name": "N7 top3 by sales not by rank (big sellers at rank 8-10) → kept in v2c (N7 off)",
    "prices": [
     20,
     20,
@@ -1913,14 +1913,14 @@
     4.5
    ],
    "expect": {
-    "excluded": "top3ShareExcluded",
+    "excluded": null,
     "darkHorses": [],
     "improvable": false,
-    "qualifies": false
+    "qualifies": true
    }
   },
   {
-   "name": "N7 one sales missing → kept, flagged",
+   "name": "N7 one sales missing → kept, not flagged in v2c (N7 off)",
    "prices": [
     20,
     20,
@@ -1985,10 +1985,10 @@
     "excluded": null,
     "darkHorses": [],
     "improvable": false,
-    "unknown": [
+    "qualifies": true,
+    "noUnknown": [
      "top3ShareUnknown"
-    ],
-    "qualifies": true
+    ]
    }
   },
   {
@@ -2021,7 +2021,7 @@
    }
   },
   {
-   "name": "N7 applies from 4 products: top3 92% → excluded",
+   "name": "N7 off even with 4 products: top3 92% → kept in v2c",
    "prices": [
     20,
     20,
@@ -2053,10 +2053,10 @@
     4.5
    ],
    "expect": {
-    "excluded": "top3ShareExcluded",
+    "excluded": null,
     "darkHorses": [],
     "improvable": false,
-    "qualifies": false
+    "qualifies": true
    }
   },
   {
@@ -3710,7 +3710,7 @@
     ],
     "improvable": false,
     "qualifies": true,
-    "unknown": [
+    "noUnknown": [
      "top3ShareUnknown"
     ]
    }

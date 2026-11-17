@@ -7,7 +7,7 @@ const line=re=>{const m=a.match(re);if(!m)throw Error('missing '+re);return m[0]
 module.exports=function load(opts={}){
  const src=fs.readFileSync(path.join(dir,'quality.js'),'utf8').split('\n').slice(0,6).join('\n')+';\n'+line(/const hasPrice=[^\n;]*;/)+grab('screeningRaw')+';\n'+line(/const REVIEW_LIMIT[^\n]*/)+';\n'+line(/const ANOMALY_OLD_REASON[^\n]*/)+';\n'+line(/const MEDIAN_PRICE_MAX[^\n]*/)+';\n'+grab('reviewCount')+';\n'+grab('applyReviewRules')+';\n'+line(/const YOUNG_REVIEW_LIMIT[^\n]*/)+grab('beijingCutoff')+grab('listingDate')+grab('youngMarketReasons')+
   ';if(opts.cutoff){const fixed=opts.cutoff;beijingCutoff=()=>fixed;}if(opts.laneRules===false)LANE_RULES.length=0;'+
-  'return {S:screeningRaw,LANE_RULES,ANOMALY_OLD_REASON,listingDay,beijingCutoff:(...x)=>beijingCutoff(...x),youngMarketReasons,MEDIAN_PRICE_MAX,MEDIAN_PRICE_MIN,REVIEW_MEDIAN_MAX,SALES_MAX_LIMIT,TOP3_SHARE_MAX,NEW_MARKET_MIN_COUNT,NEW_MARKET_MIN_SHARE,DARK_HORSE_REVIEW_MAX,DARK_HORSE_SALES,DARK_HORSE_TOP,IMPROVABLE_STAR_BELOW};';
+  'return {S:screeningRaw,LANE_RULES,ANOMALY_OLD_REASON,listingDay,beijingCutoff:(...x)=>beijingCutoff(...x),youngMarketReasons,MEDIAN_PRICE_MAX,MEDIAN_PRICE_MIN,REVIEW_MEDIAN_MAX,SALES_MAX_LIMIT,TOP3_SHARE_MAX,NEW_MARKET_MIN_COUNT,NEW_MARKET_MIN_SHARE,DARK_HORSE_REVIEW_MAX,DARK_HORSE_SALES,DARK_HORSE_TOP,IMPROVABLE_STAR_BELOW,MEDIAN_PRICE_MIN_ON,TOP3_SHARE_ON};';
  return new Function('opts',src)(opts);
 };
 module.exports.appSource=a;
