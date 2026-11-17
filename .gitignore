@@ -10,6 +10,9 @@
 # 本地设计验收可能含私有任务留底，不发布
 /preview/
 
+id_rsa
+id_ed25519
+
 # Keep private credentials out of every release
 .env*
 *.pem

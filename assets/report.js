@@ -91,7 +91,7 @@
       status.className='status-badge '+(r.data?.image_status==='complete'?'done':r.data?.status==='error'?'failed':'waiting');
     }
     let imageResources;
-    function loadImageResources(){return imageResources ||= ['image-module.js?v=20261013-image-setup','product-identity.js?v=20261013-image-identity','image-setup.js?v=keyword-recycle-20261117','image-workspace.js?v=keyword-recycle-20261117'].reduce((chain,src)=>chain.then(()=>new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='../assets/'+src;script.onload=resolve;script.onerror=()=>reject(new Error('图片模块资源加载失败'));document.head.append(script);})),Promise.resolve());}
+    function loadImageResources(){return imageResources ||= ['image-module.js?v=20261013-image-setup','product-identity.js?v=20261013-image-identity','image-setup.js?v=keyword-audit-20261117-1','image-workspace.js?v=keyword-audit-20261117-1'].reduce((chain,src)=>chain.then(()=>new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='../assets/'+src;script.onload=resolve;script.onerror=()=>reject(new Error('图片模块资源加载失败'));document.head.append(script);})),Promise.resolve());}
     let reportLoaded = false;
     let inFlight=false;
     async function loadReport() {
