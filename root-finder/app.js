@@ -18,7 +18,7 @@ function screeningRaw(row,floor,traffic=0,anomaly=null){
  result.lowCompetition=ps.length<10;
  if(ps.length!==10)return applyLaneRules(result,ps,ctx);
  result.youngMarket=youngMarketReasons(ps);
- result.top10AllHigh=ps.every(p=>{const n=rawReviews(p);return n!=null&&n>REVIEW_LIMIT;});   // D1 → v3.1 L12（不再要求价格齐全）
+ result.top10AllHigh=ps.every(p=>{const n=rawReviews(p);return n!=null&&n>TOP10_REVIEW_MIN;});   // D1 → v3.1 L12（不再要求价格齐全）
  if(!ps.every(hasPrice)){const known=ps.filter(hasPrice);if(known.length&&known.every(p=>p.price>floor))result.priceGapFloor=true;entryReview(result);return applyLaneRules(result,ps,ctx);}
  result.priceFloor=ps.every(p=>p.price>floor);
  if(anomaly!=null)ps.forEach((p,i)=>{const average=ps.reduce((sum,q,j)=>sum+(j===i?0:q.price),0)/9,uplift=(p.price/average-1)*100;if(uplift+1e-9>=anomaly){const quality=assessQuality(ps,i,anomaly),key={confirmed:'anomalies',pending:'pendingAnomalies',excluded:'excludedAnomalies'}[quality.status];result[key].push({asin:p.asin,price:p.price,otherAverage:average,upliftPercent:uplift,...quality});}});
