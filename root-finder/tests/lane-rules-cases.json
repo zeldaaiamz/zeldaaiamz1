@@ -1992,6 +1992,74 @@
    }
   },
   {
+   "name": "N7 not applied to 2 products with skewed sales (1000 vs 10) → kept",
+   "prices": [
+    20,
+    20
+   ],
+   "dates": [
+    "NEW",
+    "NEW"
+   ],
+   "sales": [
+    1000,
+    10
+   ],
+   "reviews": [
+    250,
+    250
+   ],
+   "stars": [
+    4.5,
+    4.5
+   ],
+   "expect": {
+    "excluded": null,
+    "darkHorses": [],
+    "improvable": false,
+    "qualifies": true
+   }
+  },
+  {
+   "name": "N7 applies from 4 products: top3 92% → excluded",
+   "prices": [
+    20,
+    20,
+    20,
+    20
+   ],
+   "dates": [
+    "NEW",
+    "NEW",
+    "NEW",
+    "NEW"
+   ],
+   "sales": [
+    1000,
+    100,
+    100,
+    100
+   ],
+   "reviews": [
+    250,
+    250,
+    250,
+    250
+   ],
+   "stars": [
+    4.5,
+    4.5,
+    4.5,
+    4.5
+   ],
+   "expect": {
+    "excluded": "top3ShareExcluded",
+    "darkHorses": [],
+    "improvable": false,
+    "qualifies": false
+   }
+  },
+  {
    "name": "N7 not applied to ≤3 products (low competition 3 items) → kept",
    "prices": [
     20,

@@ -1,0 +1,22 @@
+// node root-finder/tests/library-labels.test.js — 2026-11-17 规则 v2b：赛道库显示黑马 / 有改进空间标签和「新规则未通过」标记；旧记录兼容。
+const fs=require('fs'),path=require('path'),a=fs.readFileSync(path.join(__dirname,'..','library.js'),'utf8'),h=fs.readFileSync(path.join(__dirname,'..','library.html'),'utf8');
+let fails=0;const check=(n,ok,info='')=>{console.log((ok?'ok ':'FAIL ')+n,ok?'':info);if(!ok)fails++;};
+const grab=n=>{const i=a.indexOf('function '+n+'(');if(i<0)throw Error('missing '+n);let d=0;for(let k=a.indexOf('{',i);;k++){if(a[k]=='{')d++;if(a[k]=='}'&&--d==0)return a.slice(i,k+1);}};
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),dollars=x=>'$'+Number(x).toFixed(2);
+eval(grab('laneTagHtml')+grab('ruleCheckHtml')+grab('laneMethodMatch'));
+const horse={type:'dark_horse',label:'黑马',parameters:{},evidence:[{asin:'B0AAA',monthlyPurchases:400,ratingCount:40,listingDay:'2026-09-01'},{asin:'B0BBB',monthlyPurchases:300,ratingCount:10,listingDay:'2026-10-01'}]};
+const imp={type:'improvable',label:'有改进空间',parameters:{avgStar:4.05,n:8,below:4.2}};
+check('dark horse tag lists ASINs',/黑马 · B0AAA、B0BBB/.test(laneTagHtml(horse)),laneTagHtml(horse));
+check('improvable tag shows avg',/有改进空间 · 平均评分 4\.05/.test(laneTagHtml(imp)),laneTagHtml(imp));
+check('existing tag text unchanged',laneTagHtml({type:'price_floor',label:'高于底价',parameters:{topN:10,floor:20}}).includes('高于底价 · 前 10 商品均 &gt; $20.00')||laneTagHtml({type:'price_floor',label:'高于底价',parameters:{topN:10,floor:20}}).includes('高于底价 · 前 10 商品均 > $20.00'));
+check('fail mark with reason',/新规则未通过/.test(ruleCheckHtml({ruleCheck:{status:'fail',version:'v2b',reasons:['前10产品评价数中位数>500，不入选']}}))&&/评价数中位数&gt;500/.test(ruleCheckHtml({ruleCheck:{status:'fail',version:'v2b',reasons:['前10产品评价数中位数>500，不入选']}})));
+check('pending mark',/新规则待核实/.test(ruleCheckHtml({ruleCheck:{status:'pending',version:'v2b',reasons:['高价异常待核实（未确认）']}})));
+check('pass / legacy record → no mark',ruleCheckHtml({ruleCheck:{status:'pass'}})===''&&ruleCheckHtml({})==='');
+check('reasons escaped',!ruleCheckHtml({ruleCheck:{status:'fail',reasons:['<b>x</b>']}}).includes('<b>'));
+const L1={filters:[horse],ruleCheck:{status:'fail'}},L2={filters:[{type:'price_floor'}]};
+check('method filter: rule_failed',laneMethodMatch(L1,'rule_failed')&&!laneMethodMatch(L2,'rule_failed'));
+check('method filter: by filter type incl. dark_horse',laneMethodMatch(L1,'dark_horse')&&laneMethodMatch(L2,'price_floor')&&!laneMethodMatch(L2,'dark_horse'));
+check('legacy lane without filters array tolerated',laneMethodMatch({},'')&&!laneMethodMatch({},'dark_horse'));
+check('render uses laneTagHtml + ruleCheckHtml',/map\(laneTagHtml\)/.test(a)&&/ruleCheckHtml\(x\)/.test(a));
+check('version bumped',/library\.js\?v=rulesv2b-1/.test(h));
+console.log(fails?fails+' failing':'library labels ok');process.exit(fails?1:0);
