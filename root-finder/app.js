@@ -10,6 +10,8 @@ document.addEventListener('error',e=>{if(e.target.matches?.('.product-thumb img'
 function screeningRaw(row,floor,traffic=0,anomaly=null){
  const ps=row.products||[],result={priceFloor:false,anomalies:[],lowCompetition:false,pendingAnomalies:[],excludedAnomalies:[],youngMarket:[]};
  if(!row.queried||row.error||(traffic>0&&(!Number.isFinite(row.weeklySearchVolume)||row.weeklySearchVolume<traffic)))return result;
+ // 大件赛道排除（2026-11-17）：后端 bulky.py 判定后在行上标 bulky=true，前端只认这个标记（词库只在后端），所有规则下都不入选、不进待核实
+ if(row.bulky===true){result.bulkyExcluded=true;return result;}
  result.lowCompetition=ps.length>0&&ps.length<10;
  if(ps.length!==10)return result;
  result.youngMarket=youngMarketReasons(ps);
@@ -29,7 +31,7 @@ function beijingCutoff(now=Date.now()){const d=new Date(now+8*3600e3),y=d.getUTC
 function listingDate(p){const m=String(p?.firstAvailableDate??'').trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);return m?`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`:null;}
 function youngMarketReasons(ps,now=Date.now()){if(ps.length!==10)return [];const out=[];const counts=ps.map(reviewCount).filter(n=>n!=null);if(counts.length&&counts.every(n=>n<YOUNG_REVIEW_LIMIT))out.push(YOUNG_REVIEW_REASON);const cut=beijingCutoff(now),dates=ps.map(listingDate).filter(d=>d!=null);if(dates.length&&dates.every(d=>d>=cut))out.push(YOUNG_DATE_REASON);return out;}
 const screeningCache=new WeakMap();
-function screening(row,floor,traffic=0,anomaly=null){const key=JSON.stringify([beijingCutoff(),floor,traffic,anomaly,row.queried,row.error,row.weeklySearchVolume]),old=screeningCache.get(row);if(old&&old.key===key&&old.products===row.products)return old.result;const result=screeningRaw(row,floor,traffic,anomaly);screeningCache.set(row,{key,products:row.products,result});return result;}
+function screening(row,floor,traffic=0,anomaly=null){const key=JSON.stringify([beijingCutoff(),floor,traffic,anomaly,row.queried,row.error,row.weeklySearchVolume,row.bulky===true]),old=screeningCache.get(row);if(old&&old.key===key&&old.products===row.products)return old.result;const result=screeningRaw(row,floor,traffic,anomaly);screeningCache.set(row,{key,products:row.products,result});return result;}
 function rowRecord(row){return row._source||current;}
 function resultKey(row){return JSON.stringify([rowRecord(row).id,row.keyword]);}
 function findResultRow(recordId,keyword){const rows=(current&&current.data&&current.data.opportunities)||[];return rows.find(r=>rowRecord(r).id===recordId&&r.keyword===keyword);}
