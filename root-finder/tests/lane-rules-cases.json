@@ -741,7 +741,7 @@
    }
   },
   {
-   "name": "N6 review median 600 → excluded",
+   "name": "N6 review median 600, 2 new → excluded",
    "prices": [
     20,
     20,
@@ -757,7 +757,7 @@
    "dates": [
     "NEW",
     "NEW",
-    "NEW",
+    "2024-06-01",
     "2024-06-01",
     "2024-06-01",
     "2024-06-01",
@@ -879,7 +879,7 @@
    }
   },
   {
-   "name": "N6 review median 501 → excluded",
+   "name": "N6 review median 501, 2 new → excluded",
    "prices": [
     20,
     20,
@@ -895,7 +895,7 @@
    "dates": [
     "NEW",
     "NEW",
-    "NEW",
+    "2024-06-01",
     "2024-06-01",
     "2024-06-01",
     "2024-06-01",
@@ -1086,7 +1086,7 @@
    }
   },
   {
-   "name": "N6 one review missing but median surely >500 → excluded",
+   "name": "N6 one review missing but median surely >500, 2 new → excluded",
    "prices": [
     20,
     20,
@@ -1102,7 +1102,7 @@
    "dates": [
     "NEW",
     "NEW",
-    "NEW",
+    "2024-06-01",
     "2024-06-01",
     "2024-06-01",
     "2024-06-01",
@@ -1155,7 +1155,7 @@
    }
   },
   {
-   "name": "N6 one review missing, uncertain → kept, flagged",
+   "name": "N6 one review missing, uncertain, 3 new → kept, not flagged (v2d: ≥3 new skips N6)",
    "prices": [
     20,
     20,
@@ -1220,10 +1220,10 @@
     "excluded": null,
     "darkHorses": [],
     "improvable": false,
-    "unknown": [
+    "qualifies": true,
+    "noUnknown": [
      "reviewMedianUnknown"
-    ],
-    "qualifies": true
+    ]
    }
   },
   {
@@ -3291,7 +3291,7 @@
    }
   },
   {
-   "name": "N4 4th by sales (three at 200) → not dark horse → excluded",
+   "name": "N4 4th by sales (three at 200) but sales 100 > 50 → kept, tagged in v2d",
    "prices": [
     20,
     20,
@@ -3353,10 +3353,12 @@
     4.5
    ],
    "expect": {
-    "excluded": "newMarketExcluded",
-    "darkHorses": [],
+    "excluded": null,
+    "darkHorses": [
+     "LR0"
+    ],
     "improvable": false,
-    "qualifies": false
+    "qualifies": true
    }
   },
   {
@@ -3853,6 +3855,642 @@
     "darkHorses": [],
     "improvable": false,
     "qualifies": false
+   }
+  },
+  {
+   "name": "N4 sales 51 reviews 18 → kept, tagged in v2d",
+   "prices": [
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20
+   ],
+   "dates": [
+    "NEW",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01"
+   ],
+   "sales": [
+    51,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100
+   ],
+   "reviews": [
+    18,
+    250,
+    250,
+    250,
+    250,
+    250,
+    250,
+    250,
+    250,
+    250
+   ],
+   "stars": [
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5
+   ],
+   "expect": {
+    "excluded": null,
+    "darkHorses": [
+     "LR0"
+    ],
+    "improvable": false,
+    "qualifies": true
+   }
+  },
+  {
+   "name": "N4 sales exactly 50 → not dark horse → excluded",
+   "prices": [
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20
+   ],
+   "dates": [
+    "NEW",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01"
+   ],
+   "sales": [
+    50,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100
+   ],
+   "reviews": [
+    18,
+    250,
+    250,
+    250,
+    250,
+    250,
+    250,
+    250,
+    250,
+    250
+   ],
+   "stars": [
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5
+   ],
+   "expect": {
+    "excluded": "newMarketExcluded",
+    "darkHorses": [],
+    "improvable": false,
+    "qualifies": false
+   }
+  },
+  {
+   "name": "N6 median >500 with dark horse (reviews 18, sales 51) → kept, tagged in v2d",
+   "prices": [
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20
+   ],
+   "dates": [
+    "NEW",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01"
+   ],
+   "sales": [
+    51,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100
+   ],
+   "reviews": [
+    18,
+    600,
+    600,
+    600,
+    600,
+    600,
+    600,
+    600,
+    600,
+    600
+   ],
+   "stars": [
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5
+   ],
+   "expect": {
+    "excluded": null,
+    "darkHorses": [
+     "LR0"
+    ],
+    "improvable": false,
+    "qualifies": true
+   }
+  },
+  {
+   "name": "N6 median >500, sales 50 is not a dark horse → still excluded",
+   "prices": [
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20
+   ],
+   "dates": [
+    "NEW",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01"
+   ],
+   "sales": [
+    50,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100
+   ],
+   "reviews": [
+    18,
+    600,
+    600,
+    600,
+    600,
+    600,
+    600,
+    600,
+    600,
+    600
+   ],
+   "stars": [
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5
+   ],
+   "expect": {
+    "excluded": "reviewMedianExcluded",
+    "darkHorses": [],
+    "improvable": false,
+    "qualifies": false
+   }
+  },
+  {
+   "name": "N6 median >500, missing reviews on new product with sales 51 → kept, flagged, no tag",
+   "prices": [
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20
+   ],
+   "dates": [
+    "NEW",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01"
+   ],
+   "sales": [
+    51,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100
+   ],
+   "reviews": [
+    null,
+    600,
+    600,
+    600,
+    600,
+    600,
+    600,
+    600,
+    600,
+    600
+   ],
+   "stars": [
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5
+   ],
+   "expect": {
+    "excluded": null,
+    "darkHorses": [],
+    "improvable": false,
+    "unknown": [
+     "reviewMedianUnknown",
+     "newMarketUnknown"
+    ],
+    "qualifies": true
+   }
+  },
+  {
+   "name": "N6 median >500, no horse, 3 new (reviews 600) → kept in v2d",
+   "prices": [
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20
+   ],
+   "dates": [
+    "NEW",
+    "NEW",
+    "NEW",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01"
+   ],
+   "sales": [
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100
+   ],
+   "reviews": [
+    600,
+    600,
+    600,
+    600,
+    600,
+    600,
+    600,
+    600,
+    100,
+    100
+   ],
+   "stars": [
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5
+   ],
+   "expect": {
+    "excluded": null,
+    "darkHorses": [],
+    "improvable": false,
+    "qualifies": true,
+    "noUnknown": [
+     "reviewMedianUnknown"
+    ]
+   }
+  },
+  {
+   "name": "N6 median >500, no horse, only 2 new → excluded",
+   "prices": [
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20
+   ],
+   "dates": [
+    "NEW",
+    "NEW",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01"
+   ],
+   "sales": [
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100
+   ],
+   "reviews": [
+    600,
+    600,
+    600,
+    600,
+    600,
+    600,
+    600,
+    600,
+    100,
+    100
+   ],
+   "stars": [
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5
+   ],
+   "expect": {
+    "excluded": "reviewMedianExcluded",
+    "darkHorses": [],
+    "improvable": false,
+    "qualifies": false
+   }
+  },
+  {
+   "name": "N6 skipped by 3 new, but new share ≤1/5 → excluded by N3",
+   "prices": [
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20
+   ],
+   "dates": [
+    "NEW",
+    "NEW",
+    "NEW",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01"
+   ],
+   "sales": [
+    10,
+    10,
+    10,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100
+   ],
+   "reviews": [
+    600,
+    600,
+    600,
+    600,
+    600,
+    600,
+    600,
+    600,
+    100,
+    100
+   ],
+   "stars": [
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5
+   ],
+   "expect": {
+    "excluded": "newMarketExcluded",
+    "darkHorses": [],
+    "improvable": false,
+    "qualifies": false
+   }
+  },
+  {
+   "name": "N6 median >500, 2 new + 1 missing date → kept, flagged",
+   "prices": [
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20
+   ],
+   "dates": [
+    "NEW",
+    "NEW",
+    null,
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01",
+    "2024-06-01"
+   ],
+   "sales": [
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100
+   ],
+   "reviews": [
+    600,
+    600,
+    600,
+    600,
+    600,
+    600,
+    600,
+    600,
+    100,
+    100
+   ],
+   "stars": [
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5,
+    4.5
+   ],
+   "expect": {
+    "excluded": null,
+    "darkHorses": [],
+    "improvable": false,
+    "unknown": [
+     "reviewMedianUnknown",
+     "newMarketUnknown"
+    ],
+    "qualifies": true
    }
   },
   {

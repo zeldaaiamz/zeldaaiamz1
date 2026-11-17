@@ -9,8 +9,9 @@ const build=c=>({queried:true,products:c.prices.map((price,i)=>{const s=c.sales[
 const KEYS=['medianPriceHighExcluded','medianPriceLowExcluded','reviewMedianExcluded','salesMaxExcluded','top3ShareExcluded','newMarketExcluded'],FLAGS=['medianPriceUnknown','reviewMedianUnknown','salesMaxUnknown','top3ShareUnknown','newMarketUnknown'];
 const pass=m=>!!(m.priceFloor||m.anomalies.length||m.lowCompetition||m.youngMarket.length),cur=m=>pass(m)||!!m.pendingAnomalies.length;
 check('rules registered in order',H.LANE_RULES.map(f=>f.name).join()==='applyMedianPriceRule,applyReviewMedianRule,applySalesMaxRule,applyTop3ShareRule,applyNewMarketRule,applyLaneLabels');
-check('constants',JSON.stringify([H.MEDIAN_PRICE_MAX,H.MEDIAN_PRICE_MIN,H.REVIEW_MEDIAN_MAX,H.SALES_MAX_LIMIT,H.TOP3_SHARE_MAX,H.NEW_MARKET_MIN_COUNT,H.NEW_MARKET_MIN_SHARE,H.DARK_HORSE_REVIEW_MAX,H.DARK_HORSE_SALES,H.DARK_HORSE_TOP,H.IMPROVABLE_STAR_BELOW])==='[100,15,500,50,[75,100],3,[1,5],100,300,3,4.2]');
-check('v2c N7/N8 switches off',H.MEDIAN_PRICE_MIN_ON===false&&H.TOP3_SHARE_ON===false);
+check('constants',JSON.stringify([H.MEDIAN_PRICE_MAX,H.MEDIAN_PRICE_MIN,H.REVIEW_MEDIAN_MAX,H.SALES_MAX_LIMIT,H.TOP3_SHARE_MAX,H.NEW_MARKET_MIN_COUNT,H.NEW_MARKET_MIN_SHARE,H.DARK_HORSE_REVIEW_MAX,H.DARK_HORSE_SALES,H.IMPROVABLE_STAR_BELOW])==='[100,15,500,50,[75,100],3,[1,5],100,50,4.2]');
+check('v2d no DARK_HORSE_TOP',H.DARK_HORSE_TOP===undefined);
+check('v2c N7/N8 still off',H.MEDIAN_PRICE_MIN_ON===false&&H.TOP3_SHARE_ON===false);
 check('v2b reason text kept for docs',/REVIEW_MEDIAN_REASON='前10产品评价数中位数>500，不入选'/.test(a)&&/TOP3_SHARE_REASON='月购买量前3名合计占比>75%，不入选'/.test(a)&&/MEDIAN_PRICE_LOW_REASON='前10产品中位价<\$15，不入选'/.test(a));
 check('removed: N1 / D2 / fixed 2026-01-01',!/FLOOR_OLD|TOP10_OLD_REASON|OLD_DATE_LIMIT|ANOMALY_NEW_LISTING_FROM|2026-01-01/.test(a));
 for(const c of spec.cases){const floor=c.floor??spec.floor,m=S(build(c),floor,0,spec.anomalyPercent),e=c.expect,hit=KEYS.filter(k=>m[k]);
