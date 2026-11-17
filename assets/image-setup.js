@@ -11,16 +11,23 @@
   const script=doc.createElement('script');script.textContent=`document.getElementById('open-image-setup').addEventListener('click',()=>parent.postMessage({type:'keyword-images-open'},'*'));window.addEventListener('message',e=>{if(e.source===parent&&e.data?.type==='keyword-images-show-results')document.querySelector('[data-module="05"]')?.click();});`;doc.body.append(script);
   return '<!doctype html>\n'+doc.documentElement.outerHTML;
  }
- function mount({app,taskId,frame,onUpdated}){
+ function mount({app,taskId,frame,onUpdated,getLifecycle=async()=> 'active'}){
   const el=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n;};
   const dialog=el('dialog');dialog.id='image-setup-dialog';dialog.style.cssText='box-sizing:border-box;width:min(1100px,calc(100vw - 24px));max-height:90vh;font-family:system-ui,sans-serif;line-height:1.65;border:1px solid #ccdcd4;border-radius:16px;padding:24px;overflow:auto';
   const style=el('style');style.textContent='#image-setup-dialog button{max-width:100%;white-space:normal;margin:8px 8px 8px 0}#image-setup-dialog fieldset{min-width:0;border:1px solid #d7e4db;border-radius:10px;margin:14px 0;padding:16px}#image-setup-dialog input,#image-setup-dialog textarea,#image-setup-dialog select{box-sizing:border-box;max-width:100%}#image-setup-dialog p{overflow-wrap:anywhere}#image-setup-dialog [aria-invalid=true]{border:2px solid #b42318;background:#fff5f4}#image-setup-dialog .checklist-error{display:block;color:#b42318;font-size:14px}#image-setup-dialog .checklist-feedback{color:#b42318;font-weight:600}#image-setup-dialog .checklist-error[hidden],#image-setup-dialog .checklist-feedback:empty{display:none}#image-setup-dialog::backdrop{background:rgba(20,40,30,.4)}';dialog.append(style);
   const close=el('button','关闭'),title=el('h2','04 · 图片诊断准备'),message=el('p'),body=el('div');message.setAttribute('role','status');close.onclick=()=>dialog.close();dialog.append(close,title,message,body);document.body.append(dialog);
   let row=null,timer=null,submitting=false,lastRevision=null,checklistFeedback=null;const draftRequested=new Set();
+  const ensureActive=async()=>{
+   const lifecycle=await getLifecycle();
+   if(lifecycle==='active')return true;
+   body.replaceChildren();
+   message.textContent=lifecycle==='recycled'?'任务位于回收站，恢复后可继续图片操作。':'任务状态暂无法确认，请刷新后核对。';
+   return false;
+  };
   const notify=e=>{message.textContent=e.message||String(e);if(checklistFeedback){checklistFeedback.textContent=message.textContent;checklistFeedback.scrollIntoView({block:'nearest'});}else message.scrollIntoView({block:'nearest'});};
   async function send(action,input={}){
    if(submitting)return;submitting=true;body.querySelectorAll('button').forEach(b=>b.disabled=true);message.textContent='正在提交…';if(checklistFeedback)checklistFeedback.textContent='正在提交买家清单…';
-   try{const r=await app.client.rpc('request_keyword_images',{p_task_id:taskId,p_revision:row?.revision??0,p_action:action,p_input:input});if(r.error)throw r.error;await load();}
+   try{if(!await ensureActive())return;const r=await app.client.rpc('request_keyword_images',{p_task_id:taskId,p_revision:row?.revision??0,p_action:action,p_input:input});if(r.error)throw r.error;await load();}
    catch(e){notify(e);body.querySelectorAll('button').forEach(b=>b.disabled=false);}finally{submitting=false;}
   }
   function button(text,fn){const b=el('button',text);b.type='button';b.className='primary-button';b.onclick=fn;return b;}
@@ -73,7 +80,7 @@
   }
   async function load(){
    clearTimeout(timer);
-   try{const r=await app.client.from('keyword_image_sessions').select('*').eq('task_id',taskId).maybeSingle();if(r.error)throw r.error;row=r.data;render();
+   try{if(!await ensureActive())return;const r=await app.client.from('keyword_image_sessions').select('*').eq('task_id',taskId).maybeSingle();if(r.error)throw r.error;row=r.data;render();
     if(row?.status==='ready'&&row.state?.workflow?.status==='awaiting_checklist'&&!row.state.checklistDraft&&!draftRequested.has(row.state.workflow.sourceDigest)){draftRequested.add(row.state.workflow.sourceDigest);await send('draft');return;}
     if(row?.status==='ready'&&lastRevision!==row.revision){lastRevision=row.revision;await onUpdated();}
     if(row&&['queued','running'].includes(row.status)&&dialog.open)timer=setTimeout(load,2500);

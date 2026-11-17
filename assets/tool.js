@@ -275,14 +275,35 @@
       if(!savePending()){submitting=false;setButtonBusy(submitButton,false,'提交任务','');return showMessage(submitMessage,'浏览器无法保存提交记录，请恢复本机存储后再提交，避免重复任务。');}
       const taskId=pendingSubmission.id;
       const uploadPath = source ? source.upload_path : `${user.id}/${taskId}.${extension}`;
+      asinInput.disabled = true;
+      fileInput.disabled = true;
       try {
         const confirmed=await client.from('keyword_tasks').select('id').eq('id',taskId).maybeSingle();
         if(confirmed.error)throw new Error('提交状态暂无法核实；已保留任务号与文件，请稍后用原资料重试。');
+        let expected;
+        if (!confirmed.data && !source) {
+          expected = {sha:await window.KeywordVerifiedSource.sha256(await file.arrayBuffer()),size:file.size};
+          if (pendingSubmission.sha && pendingSubmission.sha !== expected.sha) {
+            throw new Error('当前选择与上次提交的文件不同，请选择原文件后重试。');
+          }
+          pendingSubmission.sha = expected.sha;
+          if (!savePending()) throw new Error('浏览器无法保存提交记录，请恢复本机存储后重试。');
+        }
         if (!confirmed.data && !source && !pendingSubmission.uploaded) {
           const contentType = extension === 'csv' ? 'text/csv' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
           const upload = await client.storage.from(config.storageBucket).upload(uploadPath, file, { contentType, upsert: false });
           if (upload.error) {if(upload.error.statusCode==='409'||/already exists|duplicate/i.test(upload.error.message||''))pendingSubmission.uploaded=true;else throw upload.error;}
           else pendingSubmission.uploaded=true;
+          if (!savePending()) throw new Error('浏览器无法保存上传记录，请恢复本机存储后重试。');
+        }
+        if (!confirmed.data) {
+          await window.KeywordVerifiedSource.waitForVerification(app,uploadPath,{
+            expected,
+            onPending() {
+              setButtonBusy(submitButton,true,'提交任务','正在校验广告报表…');
+              showMessage(submitMessage,'正在校验广告报表的实际文件，请稍候。','');
+            }
+          });
         }
         const inserted = confirmed.data?{error:null}:await client.from('keyword_tasks').insert({
           id: taskId,
@@ -305,8 +326,15 @@
         showMessage(submitMessage, source ? '重算任务已提交：将复用原数据生成新报告，旧报告保留，不新增外部取数。' : '提交成功，工人将在 30 秒内领取任务。', 'success');
         await loadTasks();
       } catch (error) {
-        showMessage(submitMessage, humanError(error));
+        if (['SOURCE_MISSING','SOURCE_UNVERIFIED','SOURCE_MISMATCH'].includes(error.code)) {
+          pendingSubmission = null;
+          showMessage(submitMessage, humanError(error)+'。请核对并重新选择资料后提交。');
+        } else {
+          showMessage(submitMessage, humanError(error));
+        }
       } finally {
+        asinInput.disabled = false;
+        fileInput.disabled = false;
         savePending();
         submitting = false;
         setButtonBusy(submitButton, false, reuseSource ? '使用原数据生成新报告' : '提交任务', '');

@@ -3,6 +3,22 @@
 
   const app = window.KeywordBattle;
   if (!app) return;
+
+  function freezeImageEditing() {
+    const edits = '[data-edit-field],[data-main-check],[data-toggle-photo],[data-pick-benchmark],[data-clear-benchmark],[data-workspace-retry]';
+    const disable = () => {
+      document.querySelectorAll('[data-image-workspace]').forEach(workspace => {
+        workspace.querySelectorAll(edits).forEach(control => {
+          control.disabled = true;
+          control.setAttribute('aria-disabled','true');
+        });
+      });
+    };
+    document.addEventListener('DOMContentLoaded', () => {
+      disable();
+      new MutationObserver(disable).observe(document.body,{childList:true,subtree:true});
+    },{once:true});
+  }
   const { client, config, showMessage, hideMessage, humanError, requireSession, statusClass, formatTime } = app;
 
   async function start() {
@@ -21,23 +37,36 @@
     let currentTask = null;
     let imageSetup = null;
     let imageWorkspace = null;
+    let lifecycle = 'unknown';
+    let sourceRecordKnown = false;
+    const readOnly = () => lifecycle !== 'active';
+    async function getLifecycle() {
+      try {
+        const result = await client.from('keyword_task_recycle')
+          .select('restored_at').eq('task_id',taskId).maybeSingle();
+        if (result.error) return 'unknown';
+        return result.data && result.data.restored_at === null ? 'recycled' : 'active';
+      } catch {return 'unknown';}
+    }
 
     window.addEventListener('message', async (event) => {
       if (event.source !== frame.contentWindow) return;
       if (event.data?.type !== 'keyword-battle-download-source') return;
-      if (!currentTask) return;const sourcePath=currentTask.recovered_source?.upload_path||currentTask.upload_path;if(!sourcePath)return;
+      if (!currentTask) return;
+      const sourcePath=currentTask.recovered_source?.upload_path||currentTask.upload_path;
+      if(!sourcePath)return;
       try {
-        const { data, error } = await client.storage.from(config.storageBucket).download(sourcePath);
-        if (error) throw error;
+        if (!sourceRecordKnown) throw Error('原始报表来源记录暂时无法确认，请刷新后再下载');
+        const {blob} = await window.KeywordVerifiedSource.readVerifiedSource(app,sourcePath);
         const extension = sourcePath.toLowerCase().endsWith('.csv') ? 'csv' : 'xlsx';
-        const url = URL.createObjectURL(data);
+        const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
         link.download = `${currentTask.asin}-原始广告报表-${currentTask.id}.${extension}`;
         link.click();
         window.setTimeout(() => URL.revokeObjectURL(url), 1000);
       } catch (error) {
-        showMessage(message,/not found|does not exist/i.test(error?.message||'')?'原始广告报表已缺失，请在历史报告中补齐对应 ASIN 的原文件；现有报告仍可查看。':`下载原始报表失败：${humanError(error)}`);message.scrollIntoView({block:'start'});
+        showMessage(message,error?.code==='SOURCE_MISSING'?'原始广告报表已缺失，请在历史报告中补齐对应 ASIN 的原文件；现有报告仍可查看。':`下载原始报表失败：${humanError(error)}`);message.scrollIntoView({block:'start'});
       }
     });
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(taskId || '')) {
@@ -50,6 +79,11 @@
 
     if(window.KeywordReportDrafts)window.KeywordReportDrafts.mount({frame,taskId,userId:session.user.id});
     async function refreshImageStatus(){
+      if (lifecycle === 'recycled') {
+        status.textContent = '回收站 · 只读';
+        status.className = 'status-badge neutral';
+        return;
+      }
       if(!currentTask?.comparison_phase||currentTask.status!=='已完成')return;
       const r=await client.from('keyword_image_sessions').select('status,error,image_status:state->workflow->status').eq('task_id',taskId).maybeSingle();
       if(r.error){status.textContent='04 已完成 · 05 状态暂无法读取';return;}
@@ -57,25 +91,42 @@
       status.className='status-badge '+(r.data?.image_status==='complete'?'done':r.data?.status==='error'?'failed':'waiting');
     }
     let imageResources;
-    function loadImageResources(){return imageResources ||= ['image-module.js?v=20261013-image-setup','product-identity.js?v=20261013-image-identity','image-setup.js?v=20261013-ai-checklist','image-workspace.js?v=20261013-workbench-v2'].reduce((chain,src)=>chain.then(()=>new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='../assets/'+src;script.onload=resolve;script.onerror=()=>reject(new Error('图片模块资源加载失败'));document.head.append(script);})),Promise.resolve());}
+    function loadImageResources(){return imageResources ||= ['image-module.js?v=20261013-image-setup','product-identity.js?v=20261013-image-identity','image-setup.js?v=keyword-recycle-20261117','image-workspace.js?v=keyword-recycle-20261117'].reduce((chain,src)=>chain.then(()=>new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='../assets/'+src;script.onload=resolve;script.onerror=()=>reject(new Error('图片模块资源加载失败'));document.head.append(script);})),Promise.resolve());}
     let reportLoaded = false;
     let inFlight=false;
     async function loadReport() {
       if(inFlight)return;
-      if (reportLoaded) {await refreshImageStatus();return;}
       inFlight=true;
-      hideMessage(message);
       try {
+        const nextLifecycle = await getLifecycle();
+        if (reportLoaded && nextLifecycle === lifecycle) {await refreshImageStatus();return;}
+        if (nextLifecycle !== lifecycle) {
+          imageSetup?.dispose();
+          imageSetup = null;
+          imageWorkspace?.dispose();
+          imageWorkspace = null;
+        }
+        lifecycle = nextLifecycle;
+        hideMessage(message);
         const { data: task, error } = await client.from('keyword_tasks')
           .select('id,asin,status,created_at,upload_path,report_url,failure_reason,comparison_phase,comparison_state')
           .eq('id', taskId)
           .maybeSingle();
         if (error) throw error;
         if (!task) throw new Error('找不到这个任务，或它不属于当前账户');
-        currentTask = task;try{const source=await client.from('keyword_task_report_sources').select('upload_path,revision').eq('task_id',taskId).maybeSingle();if(source.error)throw source.error;currentTask.recovered_source=source.data;}catch{showMessage(message,'补齐报表记录暂时无法读取，请刷新后再下载原报表。');}
+        currentTask = task;
+        sourceRecordKnown = false;
+        try {
+          const source=await client.from('keyword_task_report_sources').select('upload_path,revision').eq('task_id',taskId).maybeSingle();
+          if(source.error)throw source.error;
+          currentTask.recovered_source=source.data;
+          sourceRecordKnown=true;
+        } catch {showMessage(message,'补齐报表记录暂时无法读取，请刷新后再下载原报表。');}
         frame.title = task.comparison_phase ? '竞对与图片对比报告' : '关键词与广告分析报告';
         document.querySelector('#report-title').textContent = `${task.asin} · ${task.comparison_phase ? '竞对与图片对比' : '关键词与广告分析'}`;
         meta.textContent = `提交于 ${formatTime(task.created_at)} · 仅当前登录账户可查看`;
+        if (lifecycle === 'recycled') meta.textContent += ' · 任务位于回收站，恢复后可继续编辑';
+        if (lifecycle === 'unknown') meta.textContent += ' · 任务状态暂无法确认，报告仅供查看';
         status.className = `status-badge ${statusClass(task.status)}`;
         status.replaceChildren(document.createElement('i'), document.createTextNode(task.status));
 
@@ -108,12 +159,12 @@
           } catch { unavailable.push(name); }
         }
         if(task.comparison_phase)reportHtml='<!doctype html>\n'+reportDocument.documentElement.outerHTML;
-        if(task.comparison_phase && window.KeywordImageSetup){
+        if(task.comparison_phase && window.KeywordImageSetup && !readOnly()){
           reportHtml=window.KeywordImageSetup.upgrade(reportHtml);
-          if(!imageSetup) imageSetup=window.KeywordImageSetup.mount({app,taskId,frame,onUpdated:async()=>{reportLoaded=false;await loadReport();}});
+          imageSetup ||= window.KeywordImageSetup.mount({app,taskId,frame,getLifecycle,onUpdated:async()=>{reportLoaded=false;await loadReport();}});
         }
-        if(window.KeywordImageWorkspace && !imageWorkspace){
-          imageWorkspace=window.KeywordImageWorkspace.mount({app,taskId,frame});
+        if(task.comparison_phase && window.KeywordImageWorkspace){
+          imageWorkspace ||= window.KeywordImageWorkspace.mount({app,taskId,frame,getLifecycle,readOnly});
         }
         let finalDocument=reportDocument;
         if(task.comparison_phase){
@@ -125,6 +176,12 @@
           finalDocument=doc;
         }
         const exportDoc=finalDocument;
+        if(task.comparison_phase && readOnly()){
+          exportDoc.querySelector('#image-setup-entry')?.remove();
+          const lifecycleScript=exportDoc.createElement('script');
+          lifecycleScript.textContent='('+freezeImageEditing.toString()+')();';
+          exportDoc.head.prepend(lifecycleScript);
+        }
         window.KeywordReportPerformance.upgradeDocument(exportDoc,taskId);
         const emptyScript=exportDoc.createElement('script');emptyScript.textContent="if(!window.ZeldaReportPerformance)['exportTxt','exportCsv'].forEach(id=>document.getElementById(id)?.addEventListener('click',e=>{const n=document.getElementById('visibleCount');if(n&&n.textContent.startsWith('显示 0 / ')){e.stopImmediatePropagation();n.textContent='当前筛选结果没有可导出的关键词';}},true));";exportDoc.body.append(emptyScript);
         if(task.comparison_phase&&params.get('module')==='05'){const jump=exportDoc.createElement('script');jump.textContent="document.querySelector('[data-module=\"05\"]')?.click();";exportDoc.body.append(jump);}
@@ -135,6 +192,7 @@
         reportLoaded = true;
         await refreshImageStatus();
       } catch (error) {
+        reportLoaded = false;
         loading.hidden = true;
         status.textContent='报告读取失败';status.className='status-badge failed';
         meta.textContent='请返回任务列表核对，或刷新后重试。';

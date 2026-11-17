@@ -91,13 +91,12 @@ async function loadRanges(app,task){
  try{
    if(!uploadPath)throw Error('Upload missing');
    const ranges=await cached(dates,uploadPath,async()=>{
-     const blob=await download(app,app.config.storageBucket,uploadPath);
-     if(blob.size>app.config.maxUploadBytes)throw Error('Upload too large');
-     return uploadRanges(await blob.arrayBuffer(),uploadPath);
+     const {bytes}=await window.KeywordVerifiedSource.readVerifiedSource(app,uploadPath,{signal:downloadScope.signal});
+     return uploadRanges(bytes,uploadPath);
    });
    return {ranges};
  }catch(error){
-   return {ranges:[],rangeError:true,rangeMissing:/not found|does not exist|missing/i.test(error?.message||'')};
+   return {ranges:[],rangeError:true,rangeMissing:error?.code==='SOURCE_MISSING'};
  }
 }
 window.KeywordHistoryMetadata={loadGeneration,loadRanges,reportKey,date,csv,ranges,uploadRanges,
