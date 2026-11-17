@@ -96,6 +96,65 @@
     const pendingKey='keyword-pending-submit:'+user.id;
     try{pendingSubmission=JSON.parse(sessionStorage.getItem(pendingKey)||'null');}catch{}
     function savePending(){try{if(pendingSubmission)sessionStorage.setItem(pendingKey,JSON.stringify(pendingSubmission));else sessionStorage.removeItem(pendingKey);return true;}catch{return false;}}
+
+    async function createComparison(source) {
+      const locks = navigator.locks;
+      if (typeof locks?.request !== 'function') {
+        throw new Error('当前浏览器不支持跨标签页任务锁。请更新浏览器后从同一来源重试。');
+      }
+      const key = 'keyword-pending-comparison:' + user.id + ':' + source.id;
+      const submit = async () => {
+        let taskId, pendingId;
+        try {
+          pendingId = localStorage.getItem(key);
+          taskId = pendingId ?? crypto.randomUUID();
+          if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(taskId)) {
+            throw new Error('Invalid pending ID');
+          }
+          localStorage.setItem(key, taskId);
+          if (localStorage.getItem(key) !== taskId) throw new Error('Pending ID was not saved');
+        } catch {
+          throw new Error('浏览器无法保存竞对任务编号，请恢复本机存储后再试。');
+        }
+
+        try {
+          let confirmed = false;
+          if (pendingId) {
+            const {data, error} = await client.from('keyword_tasks')
+              .select('id,user_id,source_task_id,comparison_site,core_keyword,comparison_phase')
+              .eq('id', taskId).maybeSingle();
+            if (error) throw error;
+            if (data) {
+              if (data.id !== taskId || data.user_id !== user.id || data.source_task_id !== source.id
+                || data.comparison_site !== 'US' || data.core_keyword !== null || !data.comparison_phase) {
+                throw new Error('留存的竞对任务编号与本次来源不匹配。');
+              }
+              confirmed = true;
+            }
+          }
+          if (!confirmed) {
+            const {data, error} = await client.rpc('create_keyword_comparison', {
+              p_task_id: taskId, p_source_id: source.id, p_core_keyword: '', p_site: 'US',
+            });
+            if (error) throw error;
+            if (data !== taskId) throw new Error('服务器未确认竞对任务编号。');
+          }
+        } catch (error) {
+          throw new Error(humanError(error) + ' 已保留竞对任务编号，请从同一来源重试核实。');
+        }
+
+        try {
+          localStorage.removeItem(key);
+        } catch {
+          throw new Error('已确认竞对任务。浏览器无法清理留存编号，请恢复本机存储后再发起新任务。');
+        }
+      };
+      return locks.request(key, {ifAvailable: true}, lock => {
+        if (!lock) throw new Error('此来源的竞对任务正在提交，请稍后核实。');
+        return submit();
+      });
+    }
+
     let loadingTasks = false;
     function selectSource(task) {
       if (submitting) return;
@@ -176,8 +235,7 @@
             if(submitting)return;
             submitting=true;
             try {
-              const {error}=await client.rpc('create_keyword_comparison',{p_task_id:crypto.randomUUID(),p_source_id:t.id,p_core_keyword:'',p_site:'US'});
-              if(error)throw error;
+              await createComparison(t);
               showMessage(submitMessage,'已创建独立竞对任务（04、05），正在整理候选。请在该任务中选择竞对并继续。','success');
               await loadTasks();
             }catch(error){showMessage(submitMessage,humanError(error));}finally{submitting=false;}

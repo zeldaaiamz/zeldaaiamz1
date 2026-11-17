@@ -16,9 +16,97 @@ function uploadRanges(bytes,path){if(/\.csv$/i.test(path))return ranges(csv(new 
  const shared=files['xl/sharedStrings.xml']?[...xml(files['xl/sharedStrings.xml']).getElementsByTagName('si')].map(si=>[...si.getElementsByTagName('t')].map(t=>t.textContent).join('')):[];
  const rows=[...xml(files[target]).getElementsByTagName('row')].map(row=>{const out=[];for(const c of row.getElementsByTagName('c')){const letters=(c.getAttribute('r')||'').match(/^[A-Z]+/)?.[0];if(!letters)continue;let col=0;for(const ch of letters)col=col*26+ch.charCodeAt(0)-64;const type=c.getAttribute('t'),v=c.getElementsByTagName('v')[0]?.textContent||'';out[col-1]=type==='s'?shared[Number(v)]:type==='inlineStr'?[...c.getElementsByTagName('t')].map(t=>t.textContent).join(''):v;}return out;});const epoch=workbook.getElementsByTagName('workbookPr')[0]?.getAttribute('date1904');return ranges(rows,epoch==='1'||epoch==='true');
 }
-function generatedDate(html,task){const doc=new DOMParser().parseFromString(html,'text/html');const text=doc.body?.textContent||'';if(!text.includes(task.asin)||(!html.includes(task.id)&&!(task.report_url?.endsWith('/'+task.id+'.html')&&doc.title.includes(task.asin))))return null;const footer=[...doc.querySelectorAll('.footer')].map(e=>e.textContent).join(' '),iso=footer.match(/生成于\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)/);if(iso&&!Number.isNaN(Date.parse(iso[1])))return new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(iso[1])).replaceAll('/','-');const header=[...doc.querySelectorAll('.module-stage > .wrap p,.hero')].map(e=>e.textContent).join(' ');return date(header.match(/完成于[：:]\s*(\d{4}年\d{1,2}月\d{1,2}日)/)?.[1]);}
-async function download(app,bucket,path){const r=await app.client.storage.from(bucket).download(path);if(r.error||!r.data)throw r.error||Error('Saved file missing');return r.data;}
-async function load(app,task,type){const uploadPath=task.recovered_source?.upload_path||task.upload_path;const key=task.id+'|'+task.report_url+'|'+task.updated_at+'|'+uploadPath;if(reports.has(key))return reports.get(key);const work=(async()=>{const result={generated:null,ranges:[],generationError:false,rangeError:false,rangeMissing:false};try{const blob=await download(app,app.config.reportBucket,task.report_url);result.generated=generatedDate(await blob.text(),task);}catch{result.generationError=true;}
- if(type==='keyword'){try{if(!uploadPath)throw Error('Upload missing');if(!dates.has(uploadPath))dates.set(uploadPath,(async()=>{const blob=await download(app,app.config.storageBucket,uploadPath);if(blob.size>app.config.maxUploadBytes)throw Error('Upload too large');return uploadRanges(await blob.arrayBuffer(),uploadPath);})());result.ranges=await dates.get(uploadPath);}catch(error){result.rangeError=true;result.rangeMissing=/not found|does not exist|missing/i.test(error?.message||'');dates.delete(uploadPath);}}return result;})();reports.set(key,work);return await work;}
-window.KeywordHistoryMetadata={load,date,csv,ranges,uploadRanges,generatedDate,clear(){dates.clear();reports.clear();}};
+function generation(html,task){
+ const unknown={generated:null,generatedAt:null};
+ const doc=new DOMParser().parseFromString(html,'text/html');
+ const text=doc.body?.textContent||'';
+ if(!text.includes(task.asin)||(!html.includes(task.id)&&!(task.report_url?.endsWith('/'+task.id+'.html')&&doc.title.includes(task.asin))))return unknown;
+ const footer=[...doc.querySelectorAll('.footer')].map(e=>e.textContent).join(' ');
+ const iso=footer.match(/生成于\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?Z\b/);
+ if(iso){
+   const time=new Date(iso[1]+(iso[2]?'.'+iso[2]:'')+'Z');
+   if(Number.isFinite(time.getTime())&&time.toISOString().startsWith(iso[1]+'.')){
+     const generated=new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(time).replaceAll('/','-');
+     return {generated,generatedAt:iso[1]+'.'+(iso[2]||'').padEnd(9,'0')+'Z'};
+   }
+ }
+ const header=[...doc.querySelectorAll('.module-stage > .wrap p,.hero')].map(e=>e.textContent).join(' ');
+ return {generated:date(header.match(/完成于[：:]\s*(\d{4}年\d{1,2}月\d{1,2}日)/)?.[1]),generatedAt:null};
+}
+
+const waitingDownloads=[];
+const downloadTimeoutMs=10000;
+let activeDownloads=0;
+let downloadScope=new AbortController();
+async function download(app,bucket,path){
+ const scope=downloadScope.signal;
+ if(activeDownloads>=2)await new Promise(resolve=>waitingDownloads.push(resolve));
+ else activeDownloads++;
+ try{
+   if(scope.aborted)throw Error('Storage download cancelled');
+   const transfer=new AbortController();
+   const cancel=()=>transfer.abort();
+   const interrupted=new Promise((_,reject)=>{
+     transfer.signal.addEventListener('abort',()=>reject(Error('Storage download interrupted')),{once:true});
+   });
+   scope.addEventListener('abort',cancel,{once:true});
+   const timer=setTimeout(cancel,downloadTimeoutMs);
+   try{
+     const request=app.client.storage.from(bucket).download(path,undefined,{signal:transfer.signal});
+     const result=await Promise.race([request,interrupted]);
+     if(result.error||!result.data)throw result.error||Error('Saved file missing');
+     return result.data;
+   }finally{
+     clearTimeout(timer);
+     scope.removeEventListener('abort',cancel);
+   }
+ }finally{
+   const next=waitingDownloads.shift();
+   if(next)next();
+   else activeDownloads--;
+ }
+}
+function cached(cache,key,read){
+ if(cache.has(key))return cache.get(key);
+ const work=read().catch(error=>{
+   if(cache.get(key)===work)cache.delete(key);
+   throw error;
+ });
+ cache.set(key,work);
+ return work;
+}
+const reportKey=task=>JSON.stringify([task.id,task.report_url,task.updated_at]);
+async function loadGeneration(app,task){
+ try{
+   return await cached(reports,reportKey(task),async()=>{
+     const blob=await download(app,app.config.reportBucket,task.report_url);
+     return generation(await blob.text(),task);
+   });
+ }catch{
+   return {generated:null,generatedAt:null,generationError:true};
+ }
+}
+async function loadRanges(app,task){
+ const uploadPath=task.recovered_source?.upload_path||task.upload_path;
+ try{
+   if(!uploadPath)throw Error('Upload missing');
+   const ranges=await cached(dates,uploadPath,async()=>{
+     const blob=await download(app,app.config.storageBucket,uploadPath);
+     if(blob.size>app.config.maxUploadBytes)throw Error('Upload too large');
+     return uploadRanges(await blob.arrayBuffer(),uploadPath);
+   });
+   return {ranges};
+ }catch(error){
+   return {ranges:[],rangeError:true,rangeMissing:/not found|does not exist|missing/i.test(error?.message||'')};
+ }
+}
+window.KeywordHistoryMetadata={loadGeneration,loadRanges,reportKey,date,csv,ranges,uploadRanges,
+ generatedDate(html,task){return generation(html,task).generated;},
+ clear(){
+   downloadScope.abort();
+   downloadScope=new AbortController();
+   dates.clear();
+   reports.clear();
+ }
+};
 }());
