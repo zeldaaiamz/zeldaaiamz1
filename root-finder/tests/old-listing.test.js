@@ -1,12 +1,10 @@
 // node root-finder/tests/old-listing.test.js — 老品赛道排除（高价品全部早于 2026-01-01 上架）
 const fs=require('fs'),path=require('path'),dir=path.join(__dirname,'..');
 const a=fs.readFileSync(path.join(dir,'app.js'),'utf8');
-const grab=n=>{const i=a.indexOf('function '+n+'(');if(i<0)throw Error('missing function '+n);let d=0;for(let k=a.indexOf('{',i);;k++){if(a[k]=='{')d++;if(a[k]=='}'&&--d==0)return a.slice(i,k+1);}};
-const line=re=>{const m=a.match(re);if(!m)throw Error('missing '+re);return m[0];};
-eval(fs.readFileSync(path.join(dir,'quality.js'),'utf8').split('\n').slice(0,6).join('\n')+';'+line(/const hasPrice=[^\n;]*;/)+grab('screeningRaw')+';'+line(/const REVIEW_LIMIT[^\n]*?;const oldListing=[^\n]*?;};/)+';'+line(/const ANOMALY_NEW_LISTING_FROM[^\n]*/)+';'+line(/const FLOOR_OLD_REASON[^\n]*/)+';'+'/* 本文件只测原有规则：赛道级硬门槛（中位价/新品赛道/购买量）在 lane-rules.test.js 单独测，这里只保留第 1 条高于底价老品规则 */LANE_RULES.splice(1);'+grab('reviewCount')+';'+grab('applyReviewRules')+';'+line(/const YOUNG_REVIEW_LIMIT[^\n]*/)+grab('beijingCutoff')+grab('listingDate')+grab('youngMarketReasons')+';globalThis.S=screeningRaw;Object.assign(globalThis,{ANOMALY_NEW_LISTING_FROM,ANOMALY_OLD_REASON,listingDay})');
+const H=require('./_screening-harness.js')({laneRules:false,cutoff:JSON.parse(fs.readFileSync(path.join(__dirname,'old-listing-cases.json'),'utf8')).testCutoff});const S=H.S,ANOMALY_OLD_REASON=H.ANOMALY_OLD_REASON,listingDay=H.listingDay;// 只测原有规则（赛道级门槛在 lane-rules.test.js）
 const spec=JSON.parse(fs.readFileSync(path.join(__dirname,'old-listing-cases.json'),'utf8'));
 let fails=0;const check=(name,ok,info)=>{if(!ok){fails++;console.error('FAIL',name,info||'');}else console.log('ok',name);};
-check('threshold constant',ANOMALY_NEW_LISTING_FROM===spec.threshold,ANOMALY_NEW_LISTING_FROM);
+check('rolling threshold (no fixed date constant)',spec.threshold==='rolling-12m'&&!/ANOMALY_NEW_LISTING_FROM/.test(a));
 check('reason text',ANOMALY_OLD_REASON===spec.reason,ANOMALY_OLD_REASON);
 const build=c=>({queried:true,products:[...Array(10)].map((_,i)=>{const h=c.hi.indexOf(i);return {asin:'A'+i,price:h>=0?100:10,title:'Notebook 2 Pack 8.5 x 11 inch',monthlyPurchases:'100+',ratingCount:h>=0&&c.reviews?c.reviews[h]:300,firstAvailableDate:h>=0?c.dates[h]:(c.others||'2024-05-01')};})});
 for(const c of spec.cases){const m=S(build(c),5,0,50),e=c.expect;const ok=m.anomalies.length===e.anomalies&&!!m.anomalyOldExcluded===e.old&&(e.unknown==null||(m.anomalyListingUnknown||0)===e.unknown)&&(e.priceFloor==null||m.priceFloor===e.priceFloor)&&(!e.review||!!m.anomalyReviewExcluded)&&(!e.top10||!!m.reviewExcluded);check(c.name,ok,JSON.stringify({a:m.anomalies.length,old:m.anomalyOldExcluded,unk:m.anomalyListingUnknown,rev:m.anomalyReviewExcluded,top:m.reviewExcluded,pf:m.priceFloor}));if(e.old)check(c.name+' → excluded reason',m.excludedAnomalies.length===c.hi.length&&m.excludedAnomalies.every(x=>x.reason===ANOMALY_OLD_REASON&&x.status==='excluded'));}

@@ -1,6 +1,6 @@
 {
-  "threshold": "2026-01-01",
-  "reason": "高价品全部早于2026-01上架（老品赛道），不按高价异常入选",
+  "threshold": "rolling-12m",
+  "reason": "高价品全部早于近12个月上架（老品赛道），不按高价异常入选",
   "cases": [
     {
       "name": "single old 2025-12-31 excluded",
@@ -280,7 +280,7 @@
       }
     },
     {
-      "name": "top10 before 2022 wins",
+      "name": "D2 removed: all 10 before 2022 → anomaly old rule applies (no top10 exclusion)",
       "hi": [
         0
       ],
@@ -290,9 +290,11 @@
       "others": "2019-01-01",
       "expect": {
         "anomalies": 0,
-        "old": false,
-        "top10": true
+        "old": true,
+        "unknown": 0
       }
     }
-  ]
+  ],
+  "testCutoff": "2026-01-01",
+  "note": "规则 v2：截止日改为滚动「近12个月」（beijing_cutoff）；测试里把截止日固定为 2026-01-01，原有日期用例不变"
 }
