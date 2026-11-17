@@ -15,7 +15,7 @@ const pend=build({hi:[0],dates:['2020-01-01']});pend.products[0].monthlyPurchase
 // empty / short / unqueried rows never crash or flag
 for(const [n,r] of [['empty',{queried:true,products:[]}],['short',{queried:true,products:[{asin:'X',price:9,firstAvailableDate:'2020-01-01'}]}],['unqueried',{queried:false,products:[]}],['no products key',{queried:true}]]){const m=S(r,5,0,50);check('edge '+n,!m.anomalyOldExcluded&&!m.anomalies.length);}
 check('listingDay null for boolean',listingDay(true)===null&&listingDay(undefined)===null&&listingDay(0)===null);
-// FE/BE gate parity: rows in the 老品赛道 panel must be kept by the delete-guard visibility gate (BE curatable includes anomalyOldExcluded)
-{const i=a.indexOf('visibleRecordOps(record){'),body=a.slice(i,a.indexOf('});',i));check('visibleRecordOps gate parity (keeps anomalyOldExcluded rows)',/m\.anomalyOldExcluded/.test(body));}
-{const q=fs.readFileSync(path.join(dir,'quality.js'),'utf8'),i=q.indexOf('function renderOldListingExcluded(');check('panel offers delete button',i>=0&&/data-delete-row/.test(q.slice(i,q.indexOf('\n',i))));}
+// 2026-11-17 Hongyan：「已排除的不用显示给我」——不显示老品面板/计数，被排除的赛道直接不出现；visibleRecordOps 与后端 curatable 保持原逻辑（不含老品行）
+{const i=a.indexOf('visibleRecordOps(record){'),body=a.slice(i,a.indexOf('});',i));check('visibleRecordOps does not keep anomalyOldExcluded rows',i>=0&&!/anomalyOldExcluded/.test(body));}
+{const q=fs.readFileSync(path.join(dir,'quality.js'),'utf8'),h=fs.readFileSync(path.join(dir,'index.html'),'utf8');check('no 老品赛道 panel/count in UI',!/oldListing|老品赛道|个老品/.test(q+h)&&!/oldListingHint|oldListingRows/.test(a));}
 if(fails){console.error(fails+' failing');process.exit(1);}console.log('old-listing ok');
