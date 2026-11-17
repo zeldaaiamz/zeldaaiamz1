@@ -19,5 +19,13 @@ check('method filter: rule_failed',laneMethodMatch(L1,'rule_failed')&&!laneMetho
 check('method filter: by filter type incl. dark_horse',laneMethodMatch(L1,'dark_horse')&&laneMethodMatch(L2,'price_floor')&&!laneMethodMatch(L2,'dark_horse'));
 check('legacy lane without filters array tolerated',laneMethodMatch({},'')&&!laneMethodMatch({},'dark_horse'));
 check('render uses laneTagHtml + ruleCheckHtml',/map\(laneTagHtml\)/.test(a)&&/ruleCheckHtml\(x\)/.test(a));
-check('version bumped',/library\.js\?v=rules-v31-1/.test(h));
+check('version bumped',/library\.js\?v=rules-v31-2/.test(h));
+// 人工确认入库（2026-11-17 20:28）
+const MC={type:'manual_confirm',label:'人工确认',parameters:{codes:['zero_products'],reasons:['零商品（SIF 没返回商品），待人工看']}};
+check('manual_confirm tag shows original 待人工 reasons (tag-manual)',/tag-manual">人工确认 · 原待人工：零商品/.test(laneTagHtml(MC)),laneTagHtml(MC));
+check('manual mark: short, current reasons only in tooltip',(()=>{const t=ruleCheckHtml({ruleCheck:{status:'manual',version:'v3.1',reasons:['<x>当前原因']}});return />人工确认通过<\/span>$/.test(t)&&/title="[^"]*当前规则：&lt;x&gt;当前原因/.test(t);})());
+check('manual ruleCheck → 人工确认通过 (not warn, not 未通过)',/人工确认通过/.test(ruleCheckHtml({ruleCheck:{status:'manual',version:'v3.1',reasons:['零商品（SIF 没返回商品），待人工看']}}))&&!/tag-warn|未通过/.test(ruleCheckHtml({ruleCheck:{status:'manual',reasons:['x']}})));
+check('method filter: manual_confirm + rule_failed excludes manual',laneMethodMatch({filters:[MC],ruleCheck:{status:'manual'}},'manual_confirm')&&!laneMethodMatch({filters:[MC],ruleCheck:{status:'manual'}},'rule_failed'));
+check('method list offers 人工确认',/'improvable','manual_confirm'\]/.test(a));
+check('tag-manual style',/\.tag-manual\{/.test(fs.readFileSync(path.join(__dirname,'..','library.css'),'utf8'))&&/library\.css\?v=rules-v31-2/.test(h));
 console.log(fails?fails+' failing':'library labels ok');process.exit(fails?1:0);

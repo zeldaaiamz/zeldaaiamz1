@@ -21,6 +21,11 @@ for(const c of spec.cases){const floor=c.floor??spec.floor,anom='anomaly' in c?c
  if(out==='exclude')ok=ok&&!codes.length&&!m.pendingAnomalies.length;
  check(c.name+' ['+e.leaf+']',ok,out+' '+codes+' '+JSON.stringify({...m,excludedAnomalies:undefined}).slice(0,600));}
 console.log('outcomes',JSON.stringify(outs));
+// 人工确认入库（2026-11-17 20:28）：前端 manualConfirmable = 待人工，与后端 lanes.manual_confirmable 同口径（两边都对照这 1,708 条共用用例）
+{const grab=n=>{const i=a.indexOf('function '+n+'(');if(i<0)throw Error('missing '+n);let d=0;for(let k=a.indexOf('{',i);;k++){if(a[k]=='{')d++;if(a[k]=='}'&&--d==0)return a.slice(i,k+1);}};
+ const F=new Function('rowMatch','sureReason',grab('rowPass')+grab('rowReview')+grab('manualConfirmable')+'return {rowPass,rowReview,manualConfirmable};');
+ const bad=[];for(const c of spec.cases){const floor=c.floor??spec.floor,anom='anomaly' in c?c.anomaly:spec.anomalyPercent,m=S(build(c),floor,0,anom),f=F(()=>m,H.sureReason);if(f.manualConfirmable({})!==(c.expect.outcome==='review')||f.rowPass({})!==(c.expect.outcome==='pass'))bad.push(c.name);}
+ check('manualConfirmable == 待人工 on all shared cases (same as backend)',!bad.length,bad.slice(0,5));}
 {const m=S(build(spec.cases.find(c=>c.name.startsWith('v3.1 黑马：评价18 月购51'))),5,0,50);check('dark horse label carries asin/sales/reviews/date',m.darkHorses&&['asin','monthlyPurchases','ratingCount','listingDay'].every(k=>k in m.darkHorses[0]));}
 for(const [n,r] of [['empty',{queried:true,products:[]}],['no products key',{queried:true}]]){const m=S(r,5,0,50);check('edge '+n+' → 零商品待人工',!KEYS.some(k=>m[k])&&JSON.stringify(m.manualReview.map(x=>x.code))==='["zero_products"]'&&cur(m)&&!pass(m));}
 {const m=S({queried:false,products:[]},5,0,50);check('edge unqueried → 排除',!m.manualReview.length&&!cur(m));}
@@ -30,7 +35,7 @@ for(const [n,r] of [['empty',{queried:true,products:[]}],['no products key',{que
 check('dark horse + improvable badges rendered on result cards',/黑马 · /.test(a)&&/有改进空间 · /.test(a)&&/\$\{horseBadge\(row\)\}/.test(a));
 {const q=fs.readFileSync(path.join(dir,'quality.js'),'utf8'),h=fs.readFileSync(path.join(dir,'index.html'),'utf8');check('no exclusion panel/count in UI',!/laneExcluded|newMarketExcluded|medianPrice\w*Excluded|salesMaxExcluded|top3ShareExcluded|reviewMedianExcluded/.test(q+h)&&(a.match(/newMarketExcluded/g)||[]).length===1);}
 {const i=a.indexOf('visibleRecordOps(record){'),body=a.slice(i,a.indexOf('});',i));check('visibleRecordOps = laneCandidate (入选 ∪ 待人工, same as backend curatable)',i>=0&&/laneCandidate\(m\)/.test(body)&&!/laneExcluded|darkHorse/.test(body));}
-{const q=fs.readFileSync(path.join(dir,'quality.js'),'utf8');check('待人工 panel lists rowReview rows with 零商品 tag + 黑马',/filter\(r=>rowReview\(r\)\)/.test(q)&&/待人工 · \$\{rows\.length\}/.test(q)&&/zero_products:'零商品'/.test(q)&&/horseBadge\(r\)/.test(q));}
+{const q=fs.readFileSync(path.join(dir,'quality.js'),'utf8');check('待人工 panel lists rowReview rows with 零商品 tag + 黑马',/filter\(r=>rowReview\(r\)&&!isSavedLane\(r\)\)/.test(q)&&/待人工 · \$\{rows\.length\}/.test(q)&&/zero_products:'零商品'/.test(q)&&/horseBadge\(r\)/.test(q));}
 check('rowPass excludes 待人工',/function rowPass\(row\)\{const m=rowMatch\(row\);return sureReason\(m\)&&!m\.manualReview\.length;\}/.test(a));
 // v3.1 前后端同口径：filledFields 里的补值不进「原始口径」规则（新兴赛道 / 高价品评价 / 老品 / 待核实 / 前10全>500），赛道门槛仍用补值
 {const H2=require('./_screening-harness.js')({laneRules:false});const mk=(f)=>({queried:true,products:[...Array(10)].map((_,i)=>({asin:'F'+i,price:10,title:'Notebook 2 Pack 8.5 x 11 inch',monthlyPurchases:100,...f(i)}))});
@@ -39,6 +44,6 @@ check('rowPass excludes 待人工',/function rowPass\(row\)\{const m=rowMatch\(r
  const r=H2.S(mk(()=>({ratingCount:50,filledFields:['ratingCount'],firstAvailableDate:'2020-01-01'})),20,0,50);check('filled reviews do not make 新兴赛道 (评论<200)',!r.youngMarket.length);
  const t=H2.S(mk(()=>({ratingCount:900,filledFields:['ratingCount'],firstAvailableDate:'2026-05-01'})),5,0,50);check('filled reviews do not make top10AllHigh',!t.top10AllHigh);
  const lane=H.S(mk(i=>({ratingCount:300,firstAvailableDate:i?'2020-01-01':'2026-05-01',filledFields:i?[]:['firstAvailableDate']})),5,0,50);check('lane rules still use filled date (新品门槛过)',!lane.newMarketExcluded&&!lane.newMarketUnknown&&lane.priceFloor);}
-{const h=fs.readFileSync(path.join(dir,'index.html'),'utf8');check('FE version rules-v31-1',/app\.js\?v=rules-v31-1/.test(h)&&/quality\.js\?v=rules-v31-1/.test(h));}
+{const h=fs.readFileSync(path.join(dir,'index.html'),'utf8');check('FE version rules-v31-2',/app\.js\?v=rules-v31-2/.test(h)&&/quality\.js\?v=rules-v31-2/.test(h));}
 {const q=fs.readFileSync(path.join(dir,'quality.js'),'utf8'),h=fs.readFileSync(path.join(dir,'index.html'),'utf8');check('待人工-only rows: no 待补购买量 chip / 重新核实 button',/\$\{pend\?aiRowChip\(r\):''\}/.test(q)&&/\$\{pend\?aiRowButton\(r\):''\}/.test(q));check('待人工 panel notice explains v3.1',/待人工：/.test(h));}
 if(fails){console.error(fails+' failing');process.exit(1);}console.log('lane-rules v3.1 ok');
