@@ -7,6 +7,7 @@
   const money=n=>'¥'+(Number(n||0)/1000000).toFixed(3);
   let productCatalog = {}, tasks = [], lastTaskRender = "", loadedLimit = 50, hasMore = false;
   let relatedTasks = new Map();
+  let detailTaskId=null, detailNameInput=null, detailNameBaseline='', detailUnavailable=false;
   const expandedReuse = new Set();
   const mainTask = task => taskView.mainTask(task, id => tasks.find(t => t.id === id) || relatedTasks.get(id));
   function reportLink(task) {
@@ -110,13 +111,24 @@
     return box;
   }
   function showDetail(task) {
+    const preserve=$('task-dialog').open&&detailTaskId===task.id;
+    const name=preserve?detailNameInput:el('input');
+    const focused=document.activeElement===name,selection=focused?[name.selectionStart,name.selectionEnd]:null;
+    if(!preserve||name.value===detailNameBaseline)name.value=task.task_name||'';
+    detailTaskId=task.id;detailNameInput=name;detailNameBaseline=task.task_name||'';detailUnavailable=false;
     const host=$('task-detail');host.replaceChildren();
     const main=mainTask(task),sampleTask=main||task,report=reportLink(task);if(report)host.append(report);host.append(el('p',taskView.productName(task,productCatalog),'task-title'));
     for(const text of [task.task_name||task.asins,'任务编号：'+task.id,'状态：'+statusOf(task),task.duplicate_of&&main?'主任务状态：'+statusOf(main):'',waitingText(task),'创建：'+date(task.created_at),'记录更新：'+date(task.updated_at),!task.duplicate_of&&['抓评论','标注中','生成报告'].includes(task.status)?'执行心跳：'+date(task.heartbeat_at):'','站点：US；评论范围：'+(task.review_scope==='asin_only'?'仅本 ASIN':'含变体评论'),'采集目标：'+task.reviews_per_asin+' 条 / ASIN；'+(task.duplicate_of?'主任务样本：':'')+'实际采集：'+(sampleTask.collected_count??'未返回')+'；已标注：'+sampleTask.annotated_count,taskView.feeText(task,budgetSummary,money),
       '费用：每任务上限 ¥5、每日上限 ¥50（北京时间）。额度内自动跑完整流程，超额等待追加授权；结果未知的调用保留预占额度。','恢复说明：复用已有评论和标注留底；调用结果未知时需人工核对，失败任务不会自动重新执行；有明确失败阶段的任务可请求按原授权复用留底恢复。','归档只整理列表，不暂停执行；如需停止后续调用，请先暂停。']) if(text)host.append(el('p',text));
     for(const item of sampleTask.sample_summary?.perAsin||[])host.append(el('p',`${item.requestedAsin}：${item.count} 条；采集结束原因：${item.stopReason||'未返回'}`));
-    const name=el('input');name.value=task.task_name||'';name.maxLength=80;name.setAttribute('aria-label','编辑任务名称');const save=el('button','保存名称');save.type='button';save.onclick=()=>manage(task,'rename',name.value);host.append(name,save,actions(task));
+    name.maxLength=80;name.setAttribute('aria-label','编辑任务名称');const save=el('button','保存名称');save.type='button';save.onclick=()=>manage(task,'rename',name.value);host.append(name,save,actions(task));
     if(!$('task-dialog').open)$('task-dialog').showModal();
+    if(focused){name.focus({preventScroll:true});if(selection.every(Number.isInteger))name.setSelectionRange(...selection);}
+  }
+  function unavailableDetail(text){
+    if(!$('task-dialog').open||!detailTaskId)return;
+    detailUnavailable=true;
+    $('task-detail').replaceChildren(el('p',text),detailNameInput);
   }
   function taskCard(task, grouped=false) {
     const main=mainTask(task),sampleTask=main||task;
@@ -168,16 +180,29 @@
     const more=el('button','加载更早任务','outline');more.type='button';more.onclick=()=>{loadedLimit+=50;loadTasks()};if(hasMore)$('task-list').append(more);
     if(focusTask){const card=[...$('task-list').querySelectorAll('[data-task-id]')].find(c=>c.dataset.taskId===focusTask);const button=card&&[...card.querySelectorAll('button,a')].find(b=>b.textContent===focusLabel);button?.focus({preventScroll:true})}
   }
+  function updateTaskViews(){
+    const signature=JSON.stringify([tasks,budgetSummary,[...relatedTasks.values()],hasMore,[...tasks,...relatedTasks.values()].map(waitingText)]);
+    if(signature!==lastTaskRender){lastTaskRender=signature;renderTasks();if($('configure-dialog').open)updateSummary();}
+    if($('task-dialog').open&&detailTaskId&&!detailUnavailable){const latest=tasks.find(t=>t.id===detailTaskId)||relatedTasks.get(detailTaskId);if(latest)showDetail(latest);}
+  }
   async function loadTasks(append=false) {
-    if(loading||document.hidden)return;loading=true;
+    if(document.hidden)return;updateTaskViews();if(loading)return;loading=true;
     try {
       const {data,error}=await client.from('voc_tasks').select('*').order('created_at',{ascending:false}).range(0,loadedLimit-1);if(error)throw error;
       const budget=await client.rpc('voc_budget_overview');if(!budget.error)budgetSummary=budget.data;else budgetSummary=null;
-      const parentIds=[...new Set(data.map(t=>t.duplicate_of).filter(id=>id&&!data.some(t=>t.id===id)))];
+      const parentIds=[...new Set([...data.map(t=>t.duplicate_of),$('task-dialog').open?detailTaskId:null].filter(id=>id&&!data.some(t=>t.id===id)))];
       if(parentIds.length){const parents=await client.from('voc_tasks').select('*').in('id',parentIds);if(parents.error)throw parents.error;relatedTasks=new Map(parents.data.map(t=>[t.id,t]));}else relatedTasks=new Map();
+      const detail=data.find(t=>t.id===detailTaskId)||relatedTasks.get(detailTaskId);
+      if($('task-dialog').open&&detail?.duplicate_of&&!data.some(t=>t.id===detail.duplicate_of)&&!relatedTasks.has(detail.duplicate_of)){
+        const parent=await client.from('voc_tasks').select('*').eq('id',detail.duplicate_of).maybeSingle();if(parent.error)throw parent.error;if(parent.data)relatedTasks.set(parent.data.id,parent.data);
+      }
+      detailUnavailable=false;
+      if($('task-dialog').open&&detailTaskId&&!data.some(t=>t.id===detailTaskId)&&!relatedTasks.has(detailTaskId)){
+        unavailableDetail('该任务已不可读取，请关闭详情后刷新列表。');
+      }
       const next=data;hasMore=data.length===loadedLimit;
-      const signature=JSON.stringify([next,budgetSummary,[...relatedTasks.values()]]);tasks=next;if(signature!==lastTaskRender){lastTaskRender=signature;renderTasks();if($('configure-dialog').open)updateSummary()}message($('tasks-error'),'');
-    }catch(e){message($('tasks-error'),'任务列表读取失败，保留上次结果：'+e.message)}finally{loading=false}
+      tasks=next;updateTaskViews();message($('tasks-error'),'');
+    }catch(e){unavailableDetail('任务状态暂时无法确认，已保留名称草稿。请刷新后再操作。');message($('tasks-error'),'任务列表读取失败，保留上次结果：'+e.message)}finally{loading=false}
   }
   function setNavigation(collapsed){document.body.classList.toggle('nav-collapsed',collapsed);$('sidebar-toggle').setAttribute('aria-expanded',String(!collapsed));$('sidebar-toggle').setAttribute('aria-label',collapsed?'展开导航':'收起导航');$('sidebar-toggle').textContent=collapsed?'⇥':'⇤';}
   try{setNavigation(localStorage.getItem('voc-navigation-collapsed')==='true')}catch{}
