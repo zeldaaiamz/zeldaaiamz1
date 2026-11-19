@@ -1,4 +1,4 @@
-// node root-finder/tests/library-paper.test.js — 2026-11-19 赛道库「纸类优先」：纸类+高价异常置顶 → 纸类 → 可能纸类 → 其余；纸类标签和快速筛选。只排序和打标签，不改筛选规则。
+// node root-finder/tests/library-paper.test.js — 2026-11-19 赛道库「纸类优先」paper-2（纸类宁可多判）：纸类/可能纸类同档——(纸类|可能纸类)+高价异常置顶 → 纸类|可能纸类 → 其余；可能纸类是较轻的标签。只排序和打标签，不改筛选规则。
 const fs=require('fs'),path=require('path'),a=fs.readFileSync(path.join(__dirname,'..','library.js'),'utf8'),h=fs.readFileSync(path.join(__dirname,'..','library.html'),'utf8');
 let fails=0;const check=(n,ok,info='')=>{console.log((ok?'ok ':'FAIL ')+n,ok?'':info);if(!ok)fails++;};
 const grab=n=>{const i=a.indexOf('function '+n+'(');if(i<0)throw Error('missing '+n);let d=0;for(let k=a.indexOf('{',i);;k++){if(a[k]=='{')d++;if(a[k]=='}'&&--d==0)return a.slice(i,k+1);}};
@@ -6,30 +6,36 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 eval(grab('countText')+grab('isHpa')+grab('paperLevel')+grab('paperRank')+grab('paperMatch')+grab('sortByPaper')+grab('paperTagHtml'));
 const L=(id,level,hpa,extra={})=>({id,keyword:id,filters:hpa?[{type:'high_price_anomaly',label:'高价异常'}]:[{type:'price_floor',label:'高于底价'}],paper:level?{level,label:{paper:'纸类',maybe:'可能纸类',none:''}[level],paperCount:level==='paper'?8:3,doubtCount:1,total:10}:undefined,...extra});
 const items=[L('a',null,true),L('b','none',false),L('c','maybe',true),L('d','paper',false),L('e','paper',true),L('f','maybe',false),L('g','paper',true),L('h',null,false,{paper:null})];
-check('rank order', ['e','d','c','f','a'].map(id=>paperRank(items.find(x=>x.id===id))).join()==='0,1,2,3,4');
-check('missing / null paper field → rank 4 (old backend compatible)', paperRank(L('x',null,true))===4&&paperRank({filters:[],paper:null})===4&&paperRank({filters:[]})===4);
+check('rank order: paper and maybe share tiers', ['e','d','c','f','a'].map(id=>paperRank(items.find(x=>x.id===id))).join()==='0,1,0,1,2');
+check('missing / null paper field → rank 2 (old backend compatible)', paperRank(L('x',null,true))===2&&paperRank({filters:[],paper:null})===2&&paperRank({filters:[]})===2);
 const sorted=sortByPaper(items,'');
-check('default sort: paper+HPA first, then paper, maybe+HPA, maybe, rest; stable inside a tier', sorted.map(x=>x.id).join('')==='egdcfabh', sorted.map(x=>x.id).join(''));
+check('default sort: (paper|maybe)+HPA first, then paper|maybe, then rest; stable (time order) inside a tier', sorted.map(x=>x.id).join('')==='cegdfabh', sorted.map(x=>x.id).join(''));
 check('sort off keeps original (time) order', sortByPaper(items,'time').map(x=>x.id).join('')==='abcdefgh');
 check('sort does not mutate input', items.map(x=>x.id).join('')==='abcdefgh');
-check('filter paper only', items.filter(x=>paperMatch(x,'paper')).map(x=>x.id).join('')==='deg');
-check('filter paper + HPA', items.filter(x=>paperMatch(x,'paper_hpa')).map(x=>x.id).join('')==='eg');
-check('filter paper + maybe', items.filter(x=>paperMatch(x,'any')).map(x=>x.id).join('')==='cdefg');
-check('filter maybe only (待你确认)', items.filter(x=>paperMatch(x,'maybe')).map(x=>x.id).join('')==='cf');
+check('filter 纸类 includes 可能纸类', items.filter(x=>paperMatch(x,'paper')).map(x=>x.id).join('')==='cdefg');
+check('filter 纸类 + HPA includes 可能纸类', items.filter(x=>paperMatch(x,'paper_hpa')).map(x=>x.id).join('')==='ceg');
+check('filter strong paper only', items.filter(x=>paperMatch(x,'strong')).map(x=>x.id).join('')==='deg');
+check('legacy any == paper', items.filter(x=>paperMatch(x,'any')).map(x=>x.id).join('')==='cdefg');
+check('filter maybe only', items.filter(x=>paperMatch(x,'maybe')).map(x=>x.id).join('')==='cf');
 check('no filter / time → everything', items.filter(x=>paperMatch(x,'')).length===8&&items.filter(x=>paperMatch(x,'time')).length===8);
 const tp=paperTagHtml(L('e','paper',true));
-check('paper tag text + class', /class="tag tag-paper"/.test(tp)&&/纸类/.test(tp)&&/8\/10/.test(tp),tp);
+check('paper tag text + class', /class="tag tag-paper"/.test(tp)&&/纸类/.test(tp)&&/9\/10/.test(tp),tp);   // 纸类+拿不准 标题数
 const tm=paperTagHtml(L('c','maybe',true));
-check('maybe tag says 待确认', /tag-paper-maybe/.test(tm)&&/可能纸类/.test(tm)&&/待你确认/.test(tm),tm);
+check('maybe tag is the lighter 可能纸类 tag (no 待确认 nag)', /tag-paper-maybe/.test(tm)&&/可能纸类/.test(tm)&&!/待你确认/.test(tm)&&!/tag-paper"/.test(tm),tm);
+check('maybe tag tooltip explains weak evidence', /证据较弱/.test(tm),tm);
+const tk=paperTagHtml({filters:[],paper:{level:'paper',label:'纸类',paperCount:0,doubtCount:0,total:10,keywordHit:true,keywordEvidence:'strong'}});
+check('paper by keyword only: tag says 关键词 instead of 0/10', /纸类 · 关键词/.test(tk)&&!/0\/10/.test(tk)&&/关键词本身像纸类/.test(tk),tk);
+const tdc=paperTagHtml({filters:[],paper:{level:'paper',label:'纸类',paperCount:1,doubtCount:2,total:10}});
+check('paper tag counts 纸类+拿不准 titles', /纸类 · 3\/10/.test(tdc),tdc);
 check('no tag for none / missing', paperTagHtml(L('b','none',false))===''&&paperTagHtml(L('a',null,true))===''&&paperTagHtml({filters:[],paper:null})==='');
 check('tag escapes label', !/<script/.test(paperTagHtml({filters:[],paper:{level:'paper',label:'<script>',paperCount:7,total:10}})));
 check('tag never shows lexicon words', !/sticker|notebook|calendar|词库/.test(tp+tm));
-check('html has paper select with options', /<select id="paper"/.test(h)&&/纸类优先/.test(h)&&/只看纸类 · 高价异常/.test(h)&&/value="time"/.test(h)&&/value="maybe"/.test(h));
+check('html has paper select with options', /<select id="paper"/.test(h)&&/纸类优先/.test(h)&&/只看纸类 · 高价异常/.test(h)&&/value="time"/.test(h)&&/value="maybe"/.test(h)&&/value="strong"/.test(h)&&!/value="any"/.test(h)&&/含可能纸类/.test(h));
 check('filteredItems uses paperMatch and sortByPaper', /paperMatch\(x,paper\)/.test(grab('filteredItems'))&&/sortByPaper\(/.test(grab('filteredItems')));
 check('lane card renders paper tag', /paperTagHtml\(x\)/.test(a));
 check('paper select change re-renders and clears selection', /\$\('#paper'\)\.onchange=/.test(a));
-check('count text: no zero segments', countText([L('x','maybe',true)])==='1 条赛道 · 可能纸类 1 条'&&countText([L('x','paper',false)])==='1 条赛道 · 纸类 1 条'&&countText(items)==='8 条赛道 · 纸类 3 条（高价异常 2） · 可能纸类 2 条'&&countText([])==='0 条赛道', countText(items));
+check('count text: 纸类 counts include 可能纸类; no zero segments', countText([L('x','maybe',true)])==='1 条赛道 · 纸类 1 条（高价异常 1；其中可能纸类 1）'&&countText([L('x','paper',false)])==='1 条赛道 · 纸类 1 条'&&countText(items)==='8 条赛道 · 纸类 5 条（高价异常 3；其中可能纸类 2）'&&countText([])==='0 条赛道', countText(items));
 check('filtered-empty state differs from empty library', /当前筛选下没有赛道/.test(a));
 check('paper choice not persisted (default always 纸类优先)', !/rfLibPaper/.test(a));
-check('cache-bust version bumped', /library\.js\?v=paper-1/.test(h)&&/library\.css\?v=paper-1/.test(h));
+check('cache-bust version bumped', /library\.js\?v=paper-2/.test(h)&&/library\.css\?v=paper-2/.test(h));
 console.log(fails?`\n${fails} failed`:'\nlibrary paper ok');process.exit(fails?1:0);
