@@ -16,7 +16,7 @@ window.RootFinderCloud={
       // Keep optimistic deletes stable until the API finishes; a stale poll must not resurrect them.
       if(window.rfDeleteGuard)state=window.rfDeleteGuard.apply(state,seq);
       this.snapshot=state;
-      const rows=state.records.flatMap(record=>record.data.opportunities.map(row=>({...row,_source:{id:record.id,createdAt:record.createdAt,floor:record.floor,trafficFloor:record.trafficFloor,anomalyPercent:record.anomalyPercent,market:record.market,data:{keywordRoot:record.data.keywordRoot}}})));
+      const rows=state.records.flatMap(record=>record.data.opportunities.map(row=>({...row,_source:{id:record.id,createdAt:record.createdAt,floor:record.floor,aboveFloor:record.aboveFloor,trafficFloor:record.trafficFloor,anomalyPercent:record.anomalyPercent,market:record.market,data:{keywordRoot:record.data.keywordRoot}}})));
       current={id:'all-results',floor:0,trafficFloor:0,anomalyPercent:null,market:'US',status:state.activeJob?'running':'complete',data:{keywordRoot:'全部任务',opportunities:rows}};
       setBusy(!!state.activeJob||(!state.paused&&state.jobs.some(j=>j.queuePosition)));render();this.renderQueue();this.loading('done');
     }catch(e){if(!this.snapshot)this.loading('failed',e.message);showError('读取队列失败，云端任务可能仍在执行：'+e.message);}finally{this.polling=false;}
